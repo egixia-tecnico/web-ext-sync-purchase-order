@@ -16,25 +16,65 @@ async function getToken(baseUrl: string, userName: string, password: string, cli
     return cachedToken;
   }
 
-  const url = `${baseUrl.replace(/\/$/, "")}/apimanager/access/gettoken`;
-  const response = await axios.post(url, {
-    UserName: userName,
-    Password: password,
-    ClientId: clientId,
-    ClientSecret: clientSecret,
-  }, {
-    headers: { "Content-Type": "application/json" },
-    timeout: 15000,
-  });
+  const cleanBaseUrl = baseUrl.replace(/\/$/, "");
+  const url = `${cleanBaseUrl}/apimanager/access/gettoken`;
 
-  if (response.data?.AccessToken) {
-    cachedToken = response.data.AccessToken;
-    // Token valid for 25 minutes (refresh before expiry)
-    tokenExpiry = now + 25 * 60 * 1000;
-    return cachedToken!;
+  console.log(`[Egixia] Requesting token from: ${url}`);
+  console.log(`[Egixia] UserName: ${userName}, ClientId: ${clientId.substring(0, 8)}...`);
+
+  try {
+    const response = await axios.post(url, {
+      UserName: userName,
+      Password: password,
+      ClientId: clientId,
+      ClientSecret: clientSecret,
+    }, {
+      headers: { "Content-Type": "application/json" },
+      timeout: 15000,
+    });
+
+    console.log(`[Egixia] Token response status: ${response.status}`);
+    console.log(`[Egixia] Token response data keys: ${Object.keys(response.data || {}).join(", ")}`);
+
+    // Handle various response formats
+    const tokenValue = response.data?.AccessToken || response.data?.access_token || response.data?.token;
+
+    if (tokenValue) {
+      cachedToken = tokenValue;
+      // Token valid for 25 minutes (refresh before expiry)
+      tokenExpiry = now + 25 * 60 * 1000;
+      console.log(`[Egixia] Token obtained successfully: ${tokenValue.substring(0, 12)}...`);
+      return cachedToken!;
+    }
+
+    // If we got a response but no token, log the full response for debugging
+    const errorMessage = response.data?.Message || response.data?.message || response.data?.error || "Token no encontrado en la respuesta";
+    console.error(`[Egixia] Token error: ${errorMessage}`);
+    console.error(`[Egixia] Full response data: ${JSON.stringify(response.data).substring(0, 500)}`);
+    throw new Error(errorMessage);
+  } catch (error: any) {
+    if (error.response) {
+      // HTTP error response
+      const statusCode = error.response.status;
+      const errorData = error.response.data;
+      const errorMsg = errorData?.Message || errorData?.message || errorData?.error || `HTTP ${statusCode}`;
+      console.error(`[Egixia] Token HTTP error ${statusCode}: ${errorMsg}`);
+      console.error(`[Egixia] Response data: ${JSON.stringify(errorData).substring(0, 500)}`);
+      throw new Error(`${errorMsg}`);
+    } else if (error.code === "ECONNREFUSED" || error.code === "ENOTFOUND") {
+      console.error(`[Egixia] Connection error: ${error.code} - ${error.message}`);
+      throw new Error(`No se pudo conectar al servidor: ${cleanBaseUrl}`);
+    } else if (error.code === "ECONNABORTED" || error.message?.includes("timeout")) {
+      console.error(`[Egixia] Timeout error: ${error.message}`);
+      throw new Error("Tiempo de espera agotado al conectar con el servidor");
+    } else if (error.message) {
+      // Already formatted error from above
+      throw error;
+    } else {
+      console.error(`[Egixia] Unknown error:`, error);
+      throw new Error("Error desconocido al obtener token");
+    }
   }
-
-  throw new Error(response.data?.Message || "Error al obtener token");
 }
 
 function invalidateToken() {
@@ -72,6 +112,7 @@ async function callEgixiaApi(method: "get" | "post", endpoint: string, config: {
   } catch (error: any) {
     // Handle 401 - token expired, retry with new token
     if (error?.response?.status === 401) {
+      console.log("[Egixia] Token expired (401), refreshing...");
       invalidateToken();
       token = await getToken(baseUrl, config.userName, config.password, config.clientId, config.clientSecret);
       const response = await makeRequest(token);
@@ -80,8 +121,9 @@ async function callEgixiaApi(method: "get" | "post", endpoint: string, config: {
     // Handle 403 - permission denied
     if (error?.response?.status === 403) {
       const errorData = error.response.data;
-      const message = errorData?.error?.message || "No autorizado: Acceso denegado.";
-      throw new Error(`Servicio "${endpoint}": ${message}`);
+      const message = errorData?.error?.message || errorData?.Message || "No autorizado: Acceso denegado.";
+      console.error(`[Egixia] Permission denied (403) for "${endpoint}": ${message}`);
+      throw new Error(`Servicio "${endpoint}" no tiene permisos: ${message}`);
     }
     throw error;
   }
@@ -102,19 +144,26 @@ export const appRouter = router({
   egixia: router({
     // Get current API config (masked)
     getConfig: publicProcedure.query(async () => {
-      const config = await getDefaultApiConfig();
-      if (!config) {
+      try {
+        const config = await getDefaultApiConfig();
+        if (!config) {
+          console.log("[Egixia] No default API config found in database");
+          return { configured: false, baseUrl: "", userName: "", hasCredentials: false };
+        }
+        console.log(`[Egixia] Config found: ${config.baseUrl}, user: ${config.userName}`);
+        return {
+          configured: true,
+          baseUrl: config.baseUrl,
+          userName: config.userName,
+          hasCredentials: true,
+        };
+      } catch (error: any) {
+        console.error("[Egixia] Error reading config:", error?.message);
         return { configured: false, baseUrl: "", userName: "", hasCredentials: false };
       }
-      return {
-        configured: true,
-        baseUrl: config.baseUrl,
-        userName: config.userName,
-        hasCredentials: true,
-      };
     }),
 
-    // Test connection with provided or stored credentials
+    // Test connection with stored credentials
     testConnection: publicProcedure
       .input(z.object({
         baseUrl: z.string().optional(),
@@ -122,7 +171,7 @@ export const appRouter = router({
         password: z.string().optional(),
         clientId: z.string().optional(),
         clientSecret: z.string().optional(),
-      }).optional())
+      }).optional().nullable())
       .mutation(async ({ input }) => {
         let config: { baseUrl: string; userName: string; password: string; clientId: string; clientSecret: string };
 
@@ -135,8 +184,10 @@ export const appRouter = router({
             clientSecret: input.clientSecret,
           };
         } else {
+          console.log("[Egixia] testConnection: using stored credentials");
           const stored = await getDefaultApiConfig();
           if (!stored) {
+            console.log("[Egixia] testConnection: no stored config found");
             return { success: false, message: "No hay configuración de API almacenada. Configure las credenciales primero." };
           }
           config = stored;
@@ -147,7 +198,9 @@ export const appRouter = router({
           const token = await getToken(config.baseUrl, config.userName, config.password, config.clientId, config.clientSecret);
           return { success: true, message: "Conexión exitosa", tokenPreview: token.substring(0, 12) + "..." };
         } catch (error: any) {
-          return { success: false, message: error?.message || "Error de conexión" };
+          const msg = error?.message || "Error de conexión desconocido";
+          console.error("[Egixia] testConnection failed:", msg);
+          return { success: false, message: msg };
         }
       }),
 
@@ -161,17 +214,26 @@ export const appRouter = router({
         clientSecret: z.string(),
       }))
       .mutation(async ({ input }) => {
+        console.log(`[Egixia] saveConfig: testing connection to ${input.baseUrl}`);
         // Test connection first
         try {
           invalidateToken();
           await getToken(input.baseUrl, input.userName, input.password, input.clientId, input.clientSecret);
         } catch (error: any) {
-          return { success: false, message: "No se pudo conectar con las credenciales proporcionadas: " + (error?.message || "Error") };
+          const msg = error?.message || "Error";
+          console.error("[Egixia] saveConfig: connection test failed:", msg);
+          return { success: false, message: "No se pudo conectar con las credenciales proporcionadas: " + msg };
         }
 
         // Save to DB
-        await upsertApiConfig(input);
-        return { success: true, message: "Configuración guardada exitosamente" };
+        try {
+          await upsertApiConfig(input);
+          console.log("[Egixia] saveConfig: config saved successfully");
+          return { success: true, message: "Configuración guardada exitosamente" };
+        } catch (error: any) {
+          console.error("[Egixia] saveConfig: failed to save:", error?.message);
+          return { success: false, message: "Error al guardar la configuración: " + (error?.message || "Error de base de datos") };
+        }
       }),
 
     // Verify a single purchase order
@@ -233,9 +295,10 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const config = await getDefaultApiConfig();
         if (!config) {
-          return { success: false, error: "No hay configuración de API. Configure las credenciales.", results: [] };
+          return { success: false, error: "No hay configuración de API. Configure las credenciales.", results: [] as any[] };
         }
 
+        console.log(`[Egixia] verifyBatch: starting verification of ${input.records.length} records`);
         const startTime = Date.now();
         const results: Array<{
           buyerCode: string;
@@ -322,10 +385,9 @@ export const appRouter = router({
         // Step 2: For not_found OCs, verify if the supplier exists
         const notFoundRecords = results.filter(r => r.status === "not_found");
         if (notFoundRecords.length > 0) {
-          // Get unique supplier codes from not_found records
+          console.log(`[Egixia] verifyBatch: checking suppliers for ${notFoundRecords.length} not-found OCs`);
           const uniqueSuppliers = Array.from(new Set(notFoundRecords.map(r => r.supplierCode).filter(Boolean)));
 
-          // Verify each supplier
           const supplierExistsMap = new Map<string, boolean>();
 
           for (let i = 0; i < uniqueSuppliers.length; i += batchSize) {
@@ -343,17 +405,19 @@ export const appRouter = router({
 
                   const data = result.data as any;
                   const providers = data?.outlist_provider || [];
-                  // If rated > 0 or providers list has entries, supplier exists
                   const message = data?.Message || "";
                   const ratedMatch = message.match(/rated (\d+)/);
                   const ratedCount = ratedMatch ? parseInt(ratedMatch[1]) : 0;
 
-                  return { code: supplierCode, exists: providers.length > 0 || ratedCount > 0 };
+                  const exists = providers.length > 0 || ratedCount > 0;
+                  console.log(`[Egixia] Supplier ${supplierCode}: exists=${exists}, providers=${providers.length}, rated=${ratedCount}`);
+                  return { code: supplierCode, exists };
                 } catch (error: any) {
-                  // If 403, the service doesn't have permissions
-                  if (error?.message?.includes("No autorizado") || error?.message?.includes("Acceso denegado")) {
+                  if (error?.message?.includes("No autorizado") || error?.message?.includes("Acceso denegado") || error?.message?.includes("no tiene permisos")) {
+                    console.error(`[Egixia] Supplier check permission error: ${error.message}`);
                     return { code: supplierCode, exists: null, permissionError: error.message };
                   }
+                  console.error(`[Egixia] Supplier check error for ${supplierCode}: ${error?.message}`);
                   return { code: supplierCode, exists: null };
                 }
               })
@@ -366,7 +430,6 @@ export const appRouter = router({
                 } else if (result.value.exists === true) {
                   supplierExistsMap.set(result.value.code, true);
                 }
-                // If null (error), we don't update the map - keep as not_found
               }
             }
           }
@@ -390,6 +453,8 @@ export const appRouter = router({
         const notFound = results.filter(r => r.status === "not_found").length;
         const supplierNotExists = results.filter(r => r.status === "supplier_not_exists").length;
         const errors = results.filter(r => r.status === "error").length;
+
+        console.log(`[Egixia] verifyBatch complete: total=${results.length}, synced=${synced}, notFound=${notFound}, supplierNotExists=${supplierNotExists}, errors=${errors}, time=${executionTimeMs}ms`);
 
         try {
           await saveVerificationLog({

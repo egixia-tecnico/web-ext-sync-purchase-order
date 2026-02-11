@@ -23,3 +23,4 @@
 - [x] Dominio base intercambiable en configuración
 - [x] Auto-conexión al iniciar con credenciales de DB
 - [x] Tests de Vitest (11 tests pasando)
+- [x] BUG: Conexión falla en producción (publicado) - corregido: upsertApiConfig duplicaba registros, testConnection enviaba undefined, agregado logging detallado

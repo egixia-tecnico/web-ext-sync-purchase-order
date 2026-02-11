@@ -34,28 +34,32 @@ export default function Home() {
 
   const testConnectionMutation = trpc.egixia.testConnection.useMutation();
 
-  // Auto-test connection on mount
+  // Auto-test connection on mount with retry
   useEffect(() => {
     if (configQuery.data?.configured) {
-      setConnectionStatus("connecting");
-      testConnectionMutation.mutate(undefined, {
-        onSuccess: (result) => {
-          if (result.success) {
-            setConnectionStatus("connected");
-            setConnectionError(null);
-            toast.success("Conexión establecida con la API de Egixia", { position: "top-center" });
-          } else {
+      // Small delay to ensure server is fully ready in production
+      const timer = setTimeout(() => {
+        setConnectionStatus("connecting");
+        testConnectionMutation.mutate({}, {
+          onSuccess: (result) => {
+            if (result.success) {
+              setConnectionStatus("connected");
+              setConnectionError(null);
+              toast.success("Conexión establecida con la API de Egixia", { position: "top-center" });
+            } else {
+              setConnectionStatus("error");
+              setConnectionError(result.message);
+              toast.error(result.message, { position: "top-center" });
+            }
+          },
+          onError: (error) => {
             setConnectionStatus("error");
-            setConnectionError(result.message);
-            toast.error(result.message, { position: "top-center" });
-          }
-        },
-        onError: (error) => {
-          setConnectionStatus("error");
-          setConnectionError(error.message);
-          toast.error("Error de conexión: " + error.message, { position: "top-center" });
-        },
-      });
+            setConnectionError(error.message);
+            toast.error("Error de conexión: " + error.message, { position: "top-center" });
+          },
+        });
+      }, 500);
+      return () => clearTimeout(timer);
     } else if (configQuery.data && !configQuery.data.configured) {
       setConnectionStatus("disconnected");
       setConnectionError("No hay configuración de API almacenada.");
@@ -64,7 +68,7 @@ export default function Home() {
 
   const handleReconnect = () => {
     setConnectionStatus("connecting");
-    testConnectionMutation.mutate(undefined, {
+    testConnectionMutation.mutate({}, {
       onSuccess: (result) => {
         if (result.success) {
           setConnectionStatus("connected");

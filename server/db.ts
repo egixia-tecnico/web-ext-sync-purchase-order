@@ -108,19 +108,31 @@ export async function upsertApiConfig(config: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  // Deactivate all existing defaults
-  await db.update(apiConfigs).set({ isDefault: false }).where(eq(apiConfigs.isDefault, true));
+  // Check if a default config already exists
+  const existing = await db.select().from(apiConfigs).where(eq(apiConfigs.isDefault, true)).limit(1);
 
-  // Insert new default config
-  await db.insert(apiConfigs).values({
-    configName: config.configName || "default",
-    baseUrl: config.baseUrl,
-    userName: config.userName,
-    password: config.password,
-    clientId: config.clientId,
-    clientSecret: config.clientSecret,
-    isDefault: true,
-  });
+  if (existing.length > 0) {
+    // Update existing default config
+    await db.update(apiConfigs).set({
+      baseUrl: config.baseUrl,
+      userName: config.userName,
+      password: config.password,
+      clientId: config.clientId,
+      clientSecret: config.clientSecret,
+      configName: config.configName || "default",
+    }).where(eq(apiConfigs.id, existing[0].id));
+  } else {
+    // Insert new default config
+    await db.insert(apiConfigs).values({
+      configName: config.configName || "default",
+      baseUrl: config.baseUrl,
+      userName: config.userName,
+      password: config.password,
+      clientId: config.clientId,
+      clientSecret: config.clientSecret,
+      isDefault: true,
+    });
+  }
 }
 
 export async function saveVerificationLog(log: {
