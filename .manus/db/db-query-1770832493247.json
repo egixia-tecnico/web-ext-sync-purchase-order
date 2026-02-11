@@ -1,0 +1,9 @@
+{
+  "query": "INSERT INTO api_configs (configName, baseUrl, userName, password, clientId, clientSecret, isDefault) VALUES ('default', 'https://egixia.net/ProveedoresManuelita', 'apimanager.manuelita', '1nt3grAc1on@.2026', 'a4559cf615a14a20acb38b6eef9d315e', '823e412901664bcfa1ab2168b69ddbeb', true);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3G7vsVf2Xrg4bKL.root --database iaCkpopGnAhaAjduGswQQS --execute INSERT INTO api_configs (configName, baseUrl, userName, password, clientId, clientSecret, isDefault) VALUES ('default', 'https://egixia.net/ProveedoresManuelita', 'apimanager.manuelita', '1nt3grAc1on@.2026', 'a4559cf615a14a20acb38b6eef9d315e', '823e412901664bcfa1ab2168b69ddbeb', true);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 200
+}

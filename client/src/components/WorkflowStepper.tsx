@@ -23,7 +23,7 @@ export default function WorkflowStepper() {
   // Determine current step
   let currentStep = 1;
   if (records.length > 0) currentStep = 2;
-  if (kpi.synced > 0 || kpi.notFound > 0 || kpi.error > 0 || kpi.providerNotFound > 0) currentStep = 3;
+  if (kpi.synced > 0 || kpi.notFound > 0 || kpi.error > 0 || kpi.supplierNotExists > 0) currentStep = 3;
   if (kpi.synced > 0 && kpi.pending === 0) currentStep = 4;
   if (kpi.pending === 0 && kpi.checking === 0 && records.length > 0) currentStep = 5;
 

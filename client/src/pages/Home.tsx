@@ -4,9 +4,8 @@
  * Workflow: Cargar datos → Verificar → Resultados → Sincronizar → Exportar
  * 
  * Color personalizable vía URL: ?rgb=FF5722 o ?color=2E7D32 o ?primary=1565C0
- * Sin banner de "Conexión API requerida" - la conexión se maneja automáticamente.
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import AppHeader from "@/components/AppHeader";
 import ApiConfigDialog from "@/components/ApiConfigDialog";
@@ -17,13 +16,72 @@ import ActionBar from "@/components/ActionBar";
 import ResultsTable from "@/components/ResultsTable";
 import { useOCSync } from "@/contexts/OCSyncContext";
 import { useThemeColor } from "@/contexts/ThemeColorContext";
-import { Zap, Database, BarChart3, ArrowRight, AlertCircle, RefreshCw } from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import { Zap, Database, BarChart3, ArrowRight, AlertCircle, RefreshCw, CheckCircle2 } from "lucide-react";
+import { toast } from "sonner";
 
 export default function Home() {
   const [showApiConfig, setShowApiConfig] = useState(false);
-  const { records, connectionStatus, connectionError, reconnect } = useOCSync();
+  const { records, connectionStatus, setConnectionStatus, connectionError, setConnectionError } = useOCSync();
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
+
+  // Check API config on mount
+  const configQuery = trpc.egixia.getConfig.useQuery(undefined, {
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+
+  const testConnectionMutation = trpc.egixia.testConnection.useMutation();
+
+  // Auto-test connection on mount
+  useEffect(() => {
+    if (configQuery.data?.configured) {
+      setConnectionStatus("connecting");
+      testConnectionMutation.mutate(undefined, {
+        onSuccess: (result) => {
+          if (result.success) {
+            setConnectionStatus("connected");
+            setConnectionError(null);
+            toast.success("Conexión establecida con la API de Egixia", { position: "top-center" });
+          } else {
+            setConnectionStatus("error");
+            setConnectionError(result.message);
+            toast.error(result.message, { position: "top-center" });
+          }
+        },
+        onError: (error) => {
+          setConnectionStatus("error");
+          setConnectionError(error.message);
+          toast.error("Error de conexión: " + error.message, { position: "top-center" });
+        },
+      });
+    } else if (configQuery.data && !configQuery.data.configured) {
+      setConnectionStatus("disconnected");
+      setConnectionError("No hay configuración de API almacenada.");
+    }
+  }, [configQuery.data?.configured]);
+
+  const handleReconnect = () => {
+    setConnectionStatus("connecting");
+    testConnectionMutation.mutate(undefined, {
+      onSuccess: (result) => {
+        if (result.success) {
+          setConnectionStatus("connected");
+          setConnectionError(null);
+          toast.success("Reconexión exitosa", { position: "top-center" });
+        } else {
+          setConnectionStatus("error");
+          setConnectionError(result.message);
+          toast.error(result.message, { position: "top-center" });
+        }
+      },
+      onError: (error) => {
+        setConnectionStatus("error");
+        setConnectionError(error.message);
+      },
+    });
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -42,7 +100,6 @@ export default function Home() {
               background: `linear-gradient(135deg, rgba(${r}, ${g}, ${b}, 0.04) 0%, rgba(${r}, ${g}, ${b}, 0.01) 50%, transparent 100%)`,
             }}
           >
-            {/* Subtle pattern overlay */}
             <div className="absolute inset-0 opacity-[0.03]" style={{
               backgroundImage: `radial-gradient(circle at 25px 25px, rgb(${r}, ${g}, ${b}) 1px, transparent 0)`,
               backgroundSize: "50px 50px",
@@ -91,7 +148,6 @@ export default function Home() {
                 </div>
                 <div className="lg:col-span-2 hidden lg:block">
                   <div className="relative">
-                    {/* Decorative card stack */}
                     <div className="absolute -top-3 -right-3 w-full h-full rounded-2xl border border-border/50 bg-card/50" />
                     <div className="relative bg-card rounded-2xl border shadow-lg p-5">
                       <div className="space-y-3">
@@ -100,11 +156,11 @@ export default function Home() {
                           <ArrowRight className="w-4 h-4 text-muted-foreground/40" />
                         </div>
                         {[
-                          { step: "1", label: "Cargar Excel/CSV con OCs", done: false },
-                          { step: "2", label: "Verificar estado en portal", done: false },
-                          { step: "3", label: "Revisar indicadores KPI", done: false },
-                          { step: "4", label: "Sincronizar no encontradas", done: false },
-                          { step: "5", label: "Exportar resultados", done: false },
+                          { step: "1", label: "Cargar Excel/CSV con OCs" },
+                          { step: "2", label: "Verificar estado en portal" },
+                          { step: "3", label: "Revisar indicadores KPI" },
+                          { step: "4", label: "Sincronizar no encontradas" },
+                          { step: "5", label: "Exportar resultados" },
                         ].map((item) => (
                           <div key={item.step} className="flex items-center gap-3 p-2 rounded-lg bg-muted/30">
                             <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
@@ -123,8 +179,22 @@ export default function Home() {
           </motion.section>
         )}
 
-        {/* Connection error banner - only when there's an actual error, not as "required" */}
-        {connectionStatus === "error" && connectionError && records.length === 0 && (
+        {/* Connection status banner */}
+        {connectionStatus === "connected" && records.length === 0 && (
+          <div className="container mt-4">
+            <motion.div
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-3 rounded-lg bg-green-50 border border-green-200 flex items-center gap-3"
+            >
+              <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
+              <p className="text-sm text-green-700">Conexión establecida con la API de Egixia. Listo para verificar órdenes de compra.</p>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Connection error banner */}
+        {(connectionStatus === "error" || connectionStatus === "disconnected") && records.length === 0 && (
           <div className="container mt-4">
             <motion.div
               initial={{ opacity: 0, y: 5 }}
@@ -136,10 +206,10 @@ export default function Home() {
               </div>
               <div className="flex-1">
                 <p className="text-sm font-medium text-red-800">Error de conexión</p>
-                <p className="text-xs text-red-600">{connectionError}</p>
+                <p className="text-xs text-red-600">{connectionError || "No se pudo conectar con la API"}</p>
               </div>
               <button
-                onClick={reconnect}
+                onClick={handleReconnect}
                 className="px-3 py-1.5 rounded-lg text-xs font-medium text-white hover:opacity-90 transition-opacity shrink-0 flex items-center gap-1.5"
                 style={{ backgroundColor: `rgb(${r}, ${g}, ${b})` }}
               >
@@ -158,19 +228,10 @@ export default function Home() {
 
         {/* Main content */}
         <div className="container py-5 space-y-4">
-          {/* Workflow stepper */}
           <WorkflowStepper />
-
-          {/* Data uploader */}
           <DataUploader />
-
-          {/* KPI Dashboard */}
           <KPIDashboard />
-
-          {/* Action bar */}
           <ActionBar />
-
-          {/* Results table */}
           <ResultsTable />
         </div>
       </main>

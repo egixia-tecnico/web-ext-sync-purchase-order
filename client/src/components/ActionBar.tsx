@@ -1,9 +1,6 @@
 /**
- * ActionBar - Barra de acciones para verificar, sincronizar y exportar
+ * ActionBar - Barra de acciones para verificar y exportar
  * Design: "Operational Clarity" - barra flotante con acciones contextuales
- * 
- * Usa connectionStatus para validar conexión en vez de apiConfig.token
- * Verifica todos los registros seleccionados por defecto
  */
 import { motion, AnimatePresence } from "framer-motion";
 import { useOCSync } from "@/contexts/OCSyncContext";
@@ -13,28 +10,26 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import {
-  Search, RefreshCw, Download, CheckCheck,
+  Search, Download, CheckCheck,
   Loader2,
 } from "lucide-react";
 
 export default function ActionBar() {
   const {
     records, isProcessing, progress, connectionStatus,
-    selectedRecords, selectAll, deselectAll, selectByStatus, reconnect,
+    selectedRecords, selectAll, deselectAll, selectByStatus,
   } = useOCSync();
-  const { verifyBatch, syncBatch } = useOCVerification();
+  const { verifyBatch } = useOCVerification();
 
   if (records.length === 0) return null;
 
   const pendingCount = records.filter(r => r.status === "pending" || !r.status).length;
-  const notFoundCount = records.filter(r => r.status === "not_found" || r.status === "provider_not_found").length;
   const selectedCount = selectedRecords.size;
   const progressPercent = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
 
   const handleVerify = async () => {
     if (connectionStatus !== "connected") {
-      toast.error("No hay conexión con la API. Intentando reconectar...");
-      await reconnect();
+      toast.error("No hay conexión con la API. Configure las credenciales primero.", { position: "top-center" });
       return;
     }
 
@@ -44,23 +39,6 @@ export default function ActionBar() {
     } else {
       await verifyBatch();
     }
-    toast.success("Verificación completada");
-  };
-
-  const handleSync = async () => {
-    if (connectionStatus !== "connected") {
-      toast.error("No hay conexión con la API. Intentando reconectar...");
-      await reconnect();
-      return;
-    }
-
-    if (selectedCount > 0) {
-      const selected = records.filter(r => selectedRecords.has(r.id));
-      await syncBatch(selected);
-    } else {
-      await syncBatch();
-    }
-    toast.success("Sincronización completada");
   };
 
   const handleExport = () => {
@@ -71,7 +49,7 @@ export default function ActionBar() {
     const now = new Date();
     const dateStr = `${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, "0")}_${String(now.getDate()).padStart(2, "0")}`;
     downloadCSV(toExport, `verificacion_oc_${dateStr}.csv`);
-    toast.success(`${toExport.length} registros exportados`);
+    toast.success(`${toExport.length} registros exportados`, { position: "top-center" });
   };
 
   return (
@@ -121,20 +99,6 @@ export default function ActionBar() {
           }
         </Button>
 
-        {/* Sync */}
-        <Button
-          onClick={handleSync}
-          disabled={isProcessing || (notFoundCount === 0 && selectedCount === 0)}
-          variant="outline"
-          className="gap-2 border-amber-300 text-amber-700 hover:bg-amber-50"
-        >
-          <RefreshCw className="w-4 h-4" />
-          {selectedCount > 0
-            ? `Sincronizar seleccionados (${selectedCount})`
-            : `Sincronizar no encontradas (${notFoundCount})`
-          }
-        </Button>
-
         {/* Export */}
         <Button
           onClick={handleExport}
@@ -170,7 +134,7 @@ export default function ActionBar() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => selectByStatus("provider_not_found")}
+            onClick={() => selectByStatus("supplier_not_exists")}
             className="text-xs h-7 text-red-600"
           >
             Sin proveedor

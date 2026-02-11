@@ -45,7 +45,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: str
     borderColor: "#f59e0b",
     icon: <XCircle className="w-3.5 h-3.5" />,
   },
-  provider_not_found: {
+  supplier_not_exists: {
     label: "Proveedor no existe",
     color: "text-red-600",
     bgColor: "bg-red-50",
@@ -156,7 +156,7 @@ export default function ResultsTable() {
             <SelectItem value="all">Todos los estados</SelectItem>
             <SelectItem value="synced">Sincronizadas</SelectItem>
             <SelectItem value="not_found">No encontradas</SelectItem>
-            <SelectItem value="provider_not_found">Proveedor no existe</SelectItem>
+            <SelectItem value="supplier_not_exists">Proveedor no existe</SelectItem>
             <SelectItem value="error">Error</SelectItem>
             <SelectItem value="synced_with_error">Sync con error</SelectItem>
             <SelectItem value="pending">Pendientes</SelectItem>

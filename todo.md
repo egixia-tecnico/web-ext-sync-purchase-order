@@ -1,0 +1,25 @@
+# Project TODO
+
+- [x] Layout principal con diseño "Operational Clarity"
+- [x] Personalización de color vía URL (?rgb=FF5722)
+- [x] Componente DataUploader con drag & drop y entrada manual
+- [x] Componente KPIDashboard con tarjetas de indicadores
+- [x] Componente ResultsTable con filtros y selección
+- [x] Componente ActionBar con verificar, sincronizar, exportar
+- [x] Componente WorkflowStepper visual
+- [x] Componente AppHeader con badge Beta
+- [x] Componente ApiConfigDialog
+- [x] Descarga de plantilla Excel (.xlsx) con formato texto
+- [x] Toasts en parte superior de la pantalla (top-center)
+- [x] Todos los registros seleccionados por defecto al cargar
+- [x] Sin banner "Conexión API requerida"
+- [x] Proxy backend para evitar CORS con API de Egixia
+- [x] Credenciales por defecto almacenadas en base de datos (Manuelita)
+- [x] Manejo de error 403 con mensaje indicando servicio sin permisos
+- [x] Flujo: verificar OC → si no encontrada, validar proveedor con supplier_exists (external_code_1) → actualizar estado
+- [x] Token dinámico con renovación automática en error 401
+- [x] Resolver conflictos del upgrade web-db-user (Home.tsx)
+- [x] ApiConfigDialog: campos en blanco al editar, enmascaramiento de credenciales
+- [x] Dominio base intercambiable en configuración
+- [x] Auto-conexión al iniciar con credenciales de DB
+- [x] Tests de Vitest (11 tests pasando)

@@ -164,7 +164,7 @@ export function exportToCSV(records: OCRecord[]): string {
     checking: "Verificando",
     synced: "Sincronizada",
     not_found: "No encontrada",
-    provider_not_found: "Proveedor no existe",
+    supplier_not_exists: "Proveedor no existe",
     error: "Error",
     synced_with_error: "Sincronizada con error",
   };

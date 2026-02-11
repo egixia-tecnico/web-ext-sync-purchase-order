@@ -114,12 +114,12 @@ export default function KPIDashboard() {
     },
     {
       label: "Proveedor no existe",
-      value: kpi.providerNotFound,
+      value: kpi.supplierNotExists,
       total: kpi.total,
       color: "#ef4444",
       bgColor: "#fef2f2",
       icon: <UserX className="w-4 h-4 text-red-500" />,
-      onClick: () => selectByStatus("provider_not_found"),
+      onClick: () => selectByStatus("supplier_not_exists"),
     },
     {
       label: "Error sistema",
