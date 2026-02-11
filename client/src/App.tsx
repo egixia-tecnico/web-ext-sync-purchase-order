@@ -25,7 +25,7 @@ function App() {
         <ThemeColorProvider>
           <OCSyncProvider>
             <TooltipProvider>
-              <Toaster />
+              <Toaster position="top-center" />
               <Router />
             </TooltipProvider>
           </OCSyncProvider>

@@ -1,5 +1,11 @@
 /**
  * ApiConfigDialog - Configuración de conexión a la API de Egixia
+ * 
+ * - Los campos se muestran en BLANCO al abrir (no precargados con credenciales)
+ * - Credenciales enmascaradas: password y clientSecret tipo password
+ * - Dominio base intercambiable
+ * - Sin opción de token directo (token se obtiene dinámicamente vía gettoken)
+ * - Al guardar, se persisten las credenciales y se intenta conexión
  */
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -7,9 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useOCSync } from "@/contexts/OCSyncContext";
-import { egixiaApi } from "@/lib/egixia-api";
 import { toast } from "sonner";
-import { Loader2, CheckCircle2, AlertCircle, Server, Key } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle, Server, Globe, Key, Eye, EyeOff } from "lucide-react";
 
 interface ApiConfigDialogProps {
   open: boolean;
@@ -17,38 +22,36 @@ interface ApiConfigDialogProps {
 }
 
 export default function ApiConfigDialog({ open, onOpenChange }: ApiConfigDialogProps) {
-  const { apiConfig, setApiConfig } = useOCSync();
-  const [baseUrl, setBaseUrl] = useState(apiConfig.baseUrl);
+  const { connectionStatus, connectionError, connectWithCredentials, apiConfig } = useOCSync();
+  
+  // Campos siempre en blanco al abrir - NO precargados
+  const [baseUrl, setBaseUrl] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
-  const [token, setToken] = useState(apiConfig.token);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [isConnected, setIsConnected] = useState(!!apiConfig.token);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showSecret, setShowSecret] = useState(false);
 
+  // Reset campos a blanco cada vez que se abre el diálogo
   useEffect(() => {
     if (open) {
-      setBaseUrl(apiConfig.baseUrl);
-      setToken(apiConfig.token);
-      setIsConnected(!!apiConfig.token);
+      setBaseUrl("");
+      setUsername("");
+      setPassword("");
+      setClientId("");
+      setClientSecret("");
+      setShowPassword(false);
+      setShowSecret(false);
     }
-  }, [open, apiConfig]);
+  }, [open]);
 
   const handleConnect = async () => {
     if (!baseUrl) {
-      toast.error("Ingrese la URL base de la API");
+      toast.error("Ingrese la URL base del dominio de integración");
       return;
     }
-
-    // If token provided directly, use it
-    if (token && !username) {
-      setApiConfig({ baseUrl, token });
-      setIsConnected(true);
-      toast.success("Conexión configurada con token directo");
-      return;
-    }
-
     if (!username || !password || !clientId || !clientSecret) {
       toast.error("Complete todos los campos de autenticación");
       return;
@@ -56,39 +59,39 @@ export default function ApiConfigDialog({ open, onOpenChange }: ApiConfigDialogP
 
     setIsConnecting(true);
     try {
-      egixiaApi.configure(baseUrl, "");
-      const result = await egixiaApi.login({
-        UserName: username,
-        Password: password,
-        ClientId: clientId,
-        ClientSecret: clientSecret,
-      });
+      const newConfig = {
+        baseUrl: baseUrl.replace(/\/$/, ""),
+        token: "",
+        username,
+        password,
+        clientId,
+        clientSecret,
+      };
 
-      if (result.AccessToken) {
-        setToken(result.AccessToken);
-        setApiConfig({ baseUrl, token: result.AccessToken });
-        setIsConnected(true);
-        toast.success("Conexión exitosa con la API de Egixia");
+      const success = await connectWithCredentials(newConfig);
+      if (success) {
+        toast.success("Conexión exitosa. Credenciales almacenadas.");
+        onOpenChange(false);
       } else {
-        toast.error("No se recibió token de acceso");
+        toast.error("Error de conexión. Verifique las credenciales y la URL.");
       }
     } catch (err: any) {
-      toast.error(`Error de conexión: ${err?.message || "desconocido"}`);
+      toast.error(`Error: ${err?.message || "desconocido"}`);
     } finally {
       setIsConnecting(false);
     }
   };
 
-  const handleSaveToken = () => {
-    if (!baseUrl || !token) {
-      toast.error("Ingrese la URL base y el token");
-      return;
-    }
-    setApiConfig({ baseUrl, token });
-    setIsConnected(true);
-    toast.success("Configuración guardada");
-    onOpenChange(false);
-  };
+  const isConnected = connectionStatus === "connected";
+
+  // Enmascarar la URL base actual para mostrar estado
+  const maskedBaseUrl = apiConfig.baseUrl
+    ? apiConfig.baseUrl.replace(/^(https?:\/\/[^/]+)(.*)$/, "$1/***")
+    : "No configurada";
+
+  const maskedUser = apiConfig.username
+    ? apiConfig.username.substring(0, 3) + "***"
+    : "No configurado";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -96,100 +99,134 @@ export default function ApiConfigDialog({ open, onOpenChange }: ApiConfigDialogP
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Server className="w-5 h-5" />
-            Configuración API Egixia
+            Configuración de Conexión
           </DialogTitle>
           <DialogDescription>
-            Configure la conexión a la API del portal para verificar y sincronizar órdenes de compra.
+            Configure la conexión a la API del portal de proveedores. Las credenciales se almacenan de forma segura.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 mt-2">
           {/* Connection status */}
           {isConnected && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-50 text-emerald-700 text-sm">
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-50 text-emerald-700 text-sm border border-emerald-200">
               <CheckCircle2 className="w-4 h-4 shrink-0" />
-              <span>Conectado al portal</span>
+              <div className="flex-1">
+                <span className="font-medium">Conectado al portal</span>
+                <div className="text-xs text-emerald-600 mt-0.5 font-mono">
+                  {maskedBaseUrl} · {maskedUser}
+                </div>
+              </div>
             </div>
           )}
 
+          {connectionStatus === "error" && connectionError && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <div className="flex-1">
+                <span className="font-medium">Error de conexión</span>
+                <p className="text-xs text-red-600 mt-0.5">{connectionError}</p>
+              </div>
+            </div>
+          )}
+
+          {connectionStatus === "connecting" && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 text-blue-700 text-sm border border-blue-200">
+              <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+              <span>Conectando al portal...</span>
+            </div>
+          )}
+
+          {/* Dominio base */}
           <div className="space-y-2">
-            <Label htmlFor="baseUrl" className="text-sm font-medium">URL Base de la API</Label>
+            <Label htmlFor="baseUrl" className="text-sm font-medium flex items-center gap-1.5">
+              <Globe className="w-3.5 h-3.5" />
+              Dominio Base de Integración
+            </Label>
             <Input
               id="baseUrl"
-              placeholder="https://portal.ejemplo.com/Egixia.NetRedSocial"
+              placeholder="https://egixia.net/ProveedoresManuelita"
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
               className="font-mono text-sm"
             />
             <p className="text-xs text-muted-foreground">
-              Ejemplo: http://servidor/Egixia_Develop.NetRedSocial
+              URL base del portal. Ej: https://egixia.net/ProveedoresManuelita
             </p>
           </div>
 
+          {/* Credenciales */}
           <div className="border-t pt-4">
             <p className="text-sm font-medium mb-3 flex items-center gap-2">
               <Key className="w-4 h-4" />
-              Opción 1: Token directo
+              Credenciales de Autenticación
             </p>
-            <div className="space-y-2">
-              <Input
-                placeholder="Pegue el AccessToken aquí"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                className="font-mono text-xs"
-              />
-              <Button onClick={handleSaveToken} variant="outline" size="sm" className="w-full">
-                Guardar con token
-              </Button>
-            </div>
-          </div>
-
-          <div className="border-t pt-4">
-            <p className="text-sm font-medium mb-3">Opción 2: Autenticación completa</p>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Usuario</Label>
                 <Input
-                  placeholder="admin_test"
+                  placeholder="Ingrese el usuario"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="text-sm"
+                  autoComplete="off"
                 />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Contraseña</Label>
-                <Input
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="text-sm"
-                />
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Ingrese la contraseña"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="text-sm pr-9"
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Client ID</Label>
                 <Input
-                  placeholder="a4559cf6..."
+                  placeholder="Ingrese el Client ID"
                   value={clientId}
                   onChange={(e) => setClientId(e.target.value)}
                   className="font-mono text-xs"
+                  autoComplete="off"
                 />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Client Secret</Label>
-                <Input
-                  type="password"
-                  placeholder="823e4129..."
-                  value={clientSecret}
-                  onChange={(e) => setClientSecret(e.target.value)}
-                  className="font-mono text-xs"
-                />
+                <div className="relative">
+                  <Input
+                    type={showSecret ? "text" : "password"}
+                    placeholder="Ingrese el Client Secret"
+                    value={clientSecret}
+                    onChange={(e) => setClientSecret(e.target.value)}
+                    className="font-mono text-xs pr-9"
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSecret(!showSecret)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
               </div>
             </div>
             <Button
               onClick={handleConnect}
               disabled={isConnecting}
-              className="w-full mt-3"
+              className="w-full mt-4"
             >
               {isConnecting ? (
                 <>
@@ -197,10 +234,15 @@ export default function ApiConfigDialog({ open, onOpenChange }: ApiConfigDialogP
                   Conectando...
                 </>
               ) : (
-                "Conectar y obtener token"
+                "Probar conexión y guardar"
               )}
             </Button>
           </div>
+
+          {/* Info */}
+          <p className="text-[11px] text-muted-foreground/70 text-center pt-1">
+            Las credenciales se almacenan localmente. El token se renueva automáticamente.
+          </p>
         </div>
       </DialogContent>
     </Dialog>

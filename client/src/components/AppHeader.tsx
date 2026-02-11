@@ -1,9 +1,11 @@
 /**
  * AppHeader - Header de la Mini App con branding Egixia
  * Design: "Operational Clarity" - barra superior con color primario configurable
+ * Incluye indicador de estado de conexión
  */
 import { useThemeColor } from "@/contexts/ThemeColorContext";
-import { Settings2, RefreshCw } from "lucide-react";
+import { useOCSync } from "@/contexts/OCSyncContext";
+import { Settings2, RefreshCw, Wifi, WifiOff, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface AppHeaderProps {
@@ -13,6 +15,7 @@ interface AppHeaderProps {
 export default function AppHeader({ onSettingsClick }: AppHeaderProps) {
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
+  const { connectionStatus } = useOCSync();
 
   return (
     <motion.header
@@ -40,6 +43,33 @@ export default function AppHeader({ onSettingsClick }: AppHeaderProps) {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {/* Connection indicator */}
+          <div className="flex items-center gap-1.5 mr-1">
+            {connectionStatus === "connected" && (
+              <span className="flex items-center gap-1 text-white/70 text-[10px]">
+                <Wifi className="w-3 h-3" />
+                <span className="hidden sm:inline">Conectado</span>
+              </span>
+            )}
+            {connectionStatus === "connecting" && (
+              <span className="flex items-center gap-1 text-white/70 text-[10px]">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span className="hidden sm:inline">Conectando...</span>
+              </span>
+            )}
+            {connectionStatus === "error" && (
+              <span className="flex items-center gap-1 text-red-200 text-[10px]">
+                <WifiOff className="w-3 h-3" />
+                <span className="hidden sm:inline">Desconectado</span>
+              </span>
+            )}
+            {connectionStatus === "idle" && (
+              <span className="flex items-center gap-1 text-white/50 text-[10px]">
+                <WifiOff className="w-3 h-3" />
+                <span className="hidden sm:inline">Sin conexión</span>
+              </span>
+            )}
+          </div>
           <span className="hidden md:inline text-white/50 text-[11px] font-mono">
             Powered by Egixia
           </span>

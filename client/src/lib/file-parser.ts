@@ -1,15 +1,10 @@
 /**
  * File Parser - Parseo de archivos Excel (.xlsx, .xls) y CSV
  * Extrae: buyer_external_code, provider_external_code, purchase_order_number
+ * Todas las columnas se tratan como texto para preservar ceros a la izquierda.
  */
 import * as XLSX from "xlsx";
 import type { OCRecord } from "@/contexts/OCSyncContext";
-
-interface ParsedRow {
-  buyer_external_code: string;
-  provider_external_code: string;
-  purchase_order_number: string;
-}
 
 // Column name mappings (case-insensitive)
 const BUYER_COLUMNS = [
@@ -58,9 +53,10 @@ export function parseFileData(file: File): Promise<OCRecord[]> {
         const data = e.target?.result;
         if (!data) throw new Error("No se pudo leer el archivo");
 
-        const workbook = XLSX.read(data, { type: "array" });
+        // Leer con raw: true para tratar todo como texto y preservar ceros
+        const workbook = XLSX.read(data, { type: "array", raw: true });
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json<string[]>(firstSheet, { header: 1 });
+        const jsonData = XLSX.utils.sheet_to_json<string[]>(firstSheet, { header: 1, raw: false, defval: "" });
 
         if (jsonData.length < 2) {
           throw new Error("El archivo debe tener al menos una fila de encabezados y una fila de datos");
@@ -129,7 +125,6 @@ export function parseManualInput(text: string): OCRecord[] {
   let idCounter = 0;
 
   for (const line of lines) {
-    // Expect: buyer_code | provider_code | oc_number (tab or comma separated)
     const parts = line.split(/[,;\t|]+/).map(p => p.trim());
     if (parts.length < 2) continue;
 
@@ -201,4 +196,109 @@ export function downloadCSV(records: OCRecord[], filename: string = "resultado_v
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+/**
+ * Genera y descarga una plantilla Excel (.xlsx) con el formato requerido
+ * para la carga masiva de órdenes de compra.
+ * TODAS las columnas están en formato TEXTO para preservar ceros a la izquierda.
+ * Incluye: encabezados, formato de columnas, ejemplos y hoja de instrucciones.
+ */
+export function downloadTemplate() {
+  const wb = XLSX.utils.book_new();
+
+  // --- Hoja 1: Plantilla de datos ---
+  const templateHeaders = [
+    "buyer_external_code",
+    "provider_external_code",
+    "purchase_order_number",
+  ];
+
+  const exampleRows = [
+    ["0100", "1222748", "3300293553"],
+    ["0100", "1221267", "3300293554"],
+    ["0230", "5001234", "4500012345"],
+    ["0400", "9087654", "7700056789"],
+  ];
+
+  const templateData = [templateHeaders, ...exampleRows];
+  const wsData = XLSX.utils.aoa_to_sheet(templateData);
+
+  // Forzar TODAS las celdas a formato texto (@) para preservar ceros a la izquierda
+  const range = XLSX.utils.decode_range(wsData["!ref"] || "A1:C5");
+  for (let R = range.s.r; R <= range.e.r; R++) {
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
+      if (wsData[cellRef]) {
+        wsData[cellRef].t = "s"; // tipo string
+        wsData[cellRef].z = "@"; // formato texto
+      }
+    }
+  }
+
+  // Ancho de columnas
+  wsData["!cols"] = [
+    { wch: 22 },
+    { wch: 24 },
+    { wch: 24 },
+  ];
+
+  XLSX.utils.book_append_sheet(wb, wsData, "Ordenes de Compra");
+
+  // --- Hoja 2: Instrucciones ---
+  const instructions = [
+    ["INSTRUCCIONES DE USO - Plantilla OC Sync"],
+    [""],
+    ["Esta plantilla permite cargar órdenes de compra para verificar su estado de sincronización con el portal de proveedores."],
+    [""],
+    ["IMPORTANTE: Todas las columnas están en formato TEXTO para preservar ceros a la izquierda en los códigos."],
+    [""],
+    ["COLUMNAS REQUERIDAS:"],
+    [""],
+    ["Columna", "Descripción", "Obligatorio", "Ejemplo"],
+    ["buyer_external_code", "Código ERP de la empresa compradora", "Sí", "0100"],
+    ["provider_external_code", "Código ERP del proveedor", "No (recomendado)", "1222748"],
+    ["purchase_order_number", "Número de la orden de compra", "Sí", "3300293553"],
+    [""],
+    ["NOMBRES ALTERNATIVOS ACEPTADOS:"],
+    [""],
+    ["Para buyer_external_code:", "codigo_comprador, cod_comprador, comprador, buyer_code, empresa, codigo_empresa"],
+    ["Para provider_external_code:", "codigo_proveedor, cod_proveedor, proveedor, provider_code, vendor, supplier"],
+    ["Para purchase_order_number:", "numero_oc, nro_oc, oc, orden_compra, purchase_order, po_number, numero_orden"],
+    [""],
+    ["NOTAS IMPORTANTES:"],
+    [""],
+    ["1. La primera fila debe contener los encabezados de las columnas."],
+    ["2. Los datos de ejemplo en la hoja 'Ordenes de Compra' deben ser reemplazados con datos reales."],
+    ["3. El código de proveedor es opcional pero recomendado para la validación de existencia."],
+    ["4. Para el comprador 0230, el código de proveedor se busca en external_code_2."],
+    ["5. Para los demás compradores, el código de proveedor se busca en external_code_1."],
+    ["6. Formatos aceptados: .xlsx, .xls, .csv"],
+    ["7. NO cambie el formato de las columnas. Deben permanecer como TEXTO."],
+    [""],
+    ["Desarrollado por Egixia - OC Sync Beta"],
+  ];
+
+  const wsInstructions = XLSX.utils.aoa_to_sheet(instructions);
+  wsInstructions["!cols"] = [
+    { wch: 30 },
+    { wch: 70 },
+    { wch: 18 },
+    { wch: 18 },
+  ];
+
+  wsInstructions["!merges"] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
+    { s: { r: 2, c: 0 }, e: { r: 2, c: 3 } },
+    { s: { r: 4, c: 0 }, e: { r: 4, c: 3 } },
+  ];
+
+  XLSX.utils.book_append_sheet(wb, wsInstructions, "Instrucciones");
+
+  // Generar y descargar
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, "0")}_${String(now.getDate()).padStart(2, "0")}`;
+  const filename = `plantilla_oc_sync_${dateStr}.xlsx`;
+  
+  XLSX.writeFile(wb, filename);
 }

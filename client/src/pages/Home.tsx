@@ -4,6 +4,7 @@
  * Workflow: Cargar datos → Verificar → Resultados → Sincronizar → Exportar
  * 
  * Color personalizable vía URL: ?rgb=FF5722 o ?color=2E7D32 o ?primary=1565C0
+ * Sin banner de "Conexión API requerida" - la conexión se maneja automáticamente.
  */
 import { useState } from "react";
 import { motion } from "framer-motion";
@@ -16,15 +17,13 @@ import ActionBar from "@/components/ActionBar";
 import ResultsTable from "@/components/ResultsTable";
 import { useOCSync } from "@/contexts/OCSyncContext";
 import { useThemeColor } from "@/contexts/ThemeColorContext";
-import { Zap, ExternalLink, Shield, Database, BarChart3, ArrowRight } from "lucide-react";
+import { Zap, Database, BarChart3, ArrowRight, AlertCircle, RefreshCw } from "lucide-react";
 
 export default function Home() {
   const [showApiConfig, setShowApiConfig] = useState(false);
-  const { records, apiConfig } = useOCSync();
+  const { records, connectionStatus, connectionError, reconnect } = useOCSync();
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
-
-  const isConnected = !!apiConfig.token;
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -124,27 +123,32 @@ export default function Home() {
           </motion.section>
         )}
 
-        {/* Connection warning */}
-        {!isConnected && records.length === 0 && (
+        {/* Connection error banner - only when there's an actual error, not as "required" */}
+        {connectionStatus === "error" && connectionError && records.length === 0 && (
           <div className="container mt-4">
             <motion.div
               initial={{ opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
-              className="p-3 rounded-lg bg-amber-50 border border-amber-200 flex items-center gap-3"
+              className="p-3 rounded-lg bg-red-50 border border-red-200 flex items-center gap-3"
             >
-              <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-                <Shield className="w-4 h-4 text-amber-600" />
+              <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <AlertCircle className="w-4 h-4 text-red-600" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-medium text-amber-800">Conexión API requerida</p>
-                <p className="text-xs text-amber-600">
-                  Configure la conexión a la API de Egixia para poder verificar y sincronizar órdenes de compra.
-                </p>
+                <p className="text-sm font-medium text-red-800">Error de conexión</p>
+                <p className="text-xs text-red-600">{connectionError}</p>
               </div>
               <button
-                onClick={() => setShowApiConfig(true)}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-white hover:opacity-90 transition-opacity shrink-0"
+                onClick={reconnect}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-white hover:opacity-90 transition-opacity shrink-0 flex items-center gap-1.5"
                 style={{ backgroundColor: `rgb(${r}, ${g}, ${b})` }}
+              >
+                <RefreshCw className="w-3 h-3" />
+                Reintentar
+              </button>
+              <button
+                onClick={() => setShowApiConfig(true)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium border border-red-300 text-red-700 hover:bg-red-100 transition-colors shrink-0"
               >
                 Configurar
               </button>

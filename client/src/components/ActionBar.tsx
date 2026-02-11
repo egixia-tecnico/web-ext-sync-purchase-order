@@ -1,6 +1,9 @@
 /**
  * ActionBar - Barra de acciones para verificar, sincronizar y exportar
  * Design: "Operational Clarity" - barra flotante con acciones contextuales
+ * 
+ * Usa connectionStatus para validar conexión en vez de apiConfig.token
+ * Verifica todos los registros seleccionados por defecto
  */
 import { motion, AnimatePresence } from "framer-motion";
 import { useOCSync } from "@/contexts/OCSyncContext";
@@ -11,13 +14,13 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import {
   Search, RefreshCw, Download, CheckCheck,
-  Loader2, Play, Square, Zap
+  Loader2,
 } from "lucide-react";
 
 export default function ActionBar() {
   const {
-    records, isProcessing, progress, apiConfig,
-    selectedRecords, selectAll, deselectAll, selectByStatus,
+    records, isProcessing, progress, connectionStatus,
+    selectedRecords, selectAll, deselectAll, selectByStatus, reconnect,
   } = useOCSync();
   const { verifyBatch, syncBatch } = useOCVerification();
 
@@ -29,8 +32,9 @@ export default function ActionBar() {
   const progressPercent = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
 
   const handleVerify = async () => {
-    if (!apiConfig.baseUrl || !apiConfig.token) {
-      toast.error("Configure la conexión API primero (icono de engranaje en el header)");
+    if (connectionStatus !== "connected") {
+      toast.error("No hay conexión con la API. Intentando reconectar...");
+      await reconnect();
       return;
     }
 
@@ -44,8 +48,9 @@ export default function ActionBar() {
   };
 
   const handleSync = async () => {
-    if (!apiConfig.baseUrl || !apiConfig.token) {
-      toast.error("Configure la conexión API primero");
+    if (connectionStatus !== "connected") {
+      toast.error("No hay conexión con la API. Intentando reconectar...");
+      await reconnect();
       return;
     }
 

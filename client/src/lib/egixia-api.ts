@@ -7,6 +7,8 @@
  * - GET  /apimanager/purchase_order_v1/list → Verificar existencia de OC
  * - POST /apimanager/purchase_order_v1/synchronize_purchase_order → Sincronizar OC
  * - POST /ApiManager/suppliers_v3/supplier_exists → Verificar existencia de proveedores
+ * 
+ * Token se renueva automáticamente en caso de error 401.
  */
 
 export interface LoginRequest {
@@ -80,14 +82,55 @@ export interface ProviderCheckResponse {
 class EgixiaAPI {
   private baseUrl: string = "";
   private token: string = "";
+  private credentials: LoginRequest | null = null;
+  private isRefreshing: boolean = false;
+  private refreshPromise: Promise<string> | null = null;
 
   configure(baseUrl: string, token: string) {
-    // Remove trailing slash
     this.baseUrl = baseUrl.replace(/\/$/, "");
     this.token = token;
   }
 
-  private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  setCredentials(credentials: LoginRequest) {
+    this.credentials = credentials;
+  }
+
+  getToken(): string {
+    return this.token;
+  }
+
+  /**
+   * Renueva el token usando las credenciales almacenadas.
+   * Si ya hay una renovación en curso, espera a que termine.
+   */
+  private async refreshToken(): Promise<string> {
+    if (this.isRefreshing && this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    if (!this.credentials) {
+      throw new Error("No hay credenciales configuradas para renovar el token");
+    }
+
+    this.isRefreshing = true;
+    this.refreshPromise = (async () => {
+      try {
+        const result = await this.login(this.credentials!);
+        if (result.AccessToken) {
+          this.token = result.AccessToken;
+          return result.AccessToken;
+        }
+        throw new Error("No se recibió token de acceso al renovar");
+      } finally {
+        this.isRefreshing = false;
+        this.refreshPromise = null;
+      }
+    })();
+
+    return this.refreshPromise;
+  }
+
+  private async request<T>(path: string, options: RequestInit = {}, isRetry = false): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -100,6 +143,17 @@ class EgixiaAPI {
       headers,
     });
 
+    // Si es 401 y no es un retry, intentar renovar token y reintentar
+    if (response.status === 401 && !isRetry && this.credentials) {
+      try {
+        await this.refreshToken();
+        // Reintentar con el nuevo token
+        return this.request<T>(path, options, true);
+      } catch {
+        throw new Error("Error de autenticación: no se pudo renovar el token. Verifique las credenciales.");
+      }
+    }
+
     if (!response.ok) {
       const text = await response.text().catch(() => "");
       throw new Error(`API Error ${response.status}: ${text || response.statusText}`);
@@ -109,10 +163,25 @@ class EgixiaAPI {
   }
 
   async login(credentials: LoginRequest): Promise<LoginResponse> {
-    return this.request<LoginResponse>("/apimanager/access/gettoken", {
+    // Login no usa token, hace request directo
+    const url = `${this.baseUrl}/apimanager/access/gettoken`;
+    const response = await fetch(url, {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(credentials),
     });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`Error de autenticación ${response.status}: ${text || response.statusText}`);
+    }
+
+    const result = await response.json();
+    if (result.AccessToken) {
+      this.token = result.AccessToken;
+      this.credentials = credentials;
+    }
+    return result;
   }
 
   async checkOC(buyer_external_code: string, purchase_order_number: string): Promise<OCListResponse> {

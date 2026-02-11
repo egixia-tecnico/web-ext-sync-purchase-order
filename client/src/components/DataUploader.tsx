@@ -1,6 +1,7 @@
 /**
  * DataUploader - Zona de carga de datos por archivo o entrada manual
  * Design: "Operational Clarity" - zona de drop con borde dashed animado
+ * Incluye botón de descarga de plantilla .xlsx con formato texto
  */
 import { useState, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
@@ -8,9 +9,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useOCSync } from "@/contexts/OCSyncContext";
-import { parseFileData, parseManualInput } from "@/lib/file-parser";
+import { parseFileData, parseManualInput, downloadTemplate } from "@/lib/file-parser";
 import { toast } from "sonner";
-import { Upload, FileSpreadsheet, Keyboard, X, FileCheck, AlertTriangle, FileUp } from "lucide-react";
+import { Upload, FileSpreadsheet, Keyboard, X, FileCheck, AlertTriangle, FileUp, Download } from "lucide-react";
 
 export default function DataUploader() {
   const { records, setRecords } = useOCSync();
@@ -53,7 +54,7 @@ export default function DataUploader() {
       const parsed = await parseFileData(file);
       setRecords(parsed);
       setFileName(file.name);
-      toast.success(`${parsed.length} órdenes de compra cargadas desde ${file.name}`);
+      toast.success(`${parsed.length} órdenes de compra cargadas desde ${file.name}. Todos los registros seleccionados.`);
     } catch (err: any) {
       toast.error(err?.message || "Error al procesar el archivo");
     }
@@ -70,7 +71,7 @@ export default function DataUploader() {
       return;
     }
     setRecords(parsed);
-    toast.success(`${parsed.length} órdenes de compra cargadas`);
+    toast.success(`${parsed.length} órdenes de compra cargadas. Todos los registros seleccionados.`);
   };
 
   const handleClear = () => {
@@ -78,6 +79,15 @@ export default function DataUploader() {
     setFileName("");
     setManualText("");
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleDownloadTemplate = () => {
+    try {
+      downloadTemplate();
+      toast.success("Plantilla descargada correctamente");
+    } catch (err: any) {
+      toast.error("Error al generar la plantilla");
+    }
   };
 
   if (records.length > 0) {
@@ -173,16 +183,36 @@ export default function DataUploader() {
               </div>
             </div>
           </div>
-          <div className="mt-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
-            <div className="flex gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <div className="text-xs text-amber-800">
-                <p className="font-medium">Columnas requeridas en el archivo:</p>
-                <p className="mt-0.5">
-                  <span className="font-mono bg-amber-100 px-1 rounded">buyer_external_code</span> (o codigo_comprador),{" "}
-                  <span className="font-mono bg-amber-100 px-1 rounded">provider_external_code</span> (o codigo_proveedor),{" "}
-                  <span className="font-mono bg-amber-100 px-1 rounded">purchase_order_number</span> (o numero_oc)
-                </p>
+
+          {/* Template download + column info */}
+          <div className="mt-3 flex flex-col gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDownloadTemplate();
+              }}
+              className="w-full gap-2 text-sm border-primary/30 text-primary hover:bg-primary/5"
+            >
+              <Download className="w-4 h-4" />
+              Descargar plantilla Excel (.xlsx)
+            </Button>
+
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+              <div className="flex gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="text-xs text-amber-800">
+                  <p className="font-medium">Columnas requeridas (formato texto):</p>
+                  <p className="mt-0.5">
+                    <span className="font-mono bg-amber-100 px-1 rounded">buyer_external_code</span> (o codigo_comprador),{" "}
+                    <span className="font-mono bg-amber-100 px-1 rounded">provider_external_code</span> (o codigo_proveedor),{" "}
+                    <span className="font-mono bg-amber-100 px-1 rounded">purchase_order_number</span> (o numero_oc)
+                  </p>
+                  <p className="mt-1 text-amber-600">
+                    Todas las columnas deben estar en formato texto para evitar pérdida de ceros a la izquierda.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
