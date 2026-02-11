@@ -63,6 +63,8 @@ interface OCSyncContextType {
   deselectAll: () => void;
   selectByStatus: (status: OCRecord["status"]) => void;
   selectMultipleStatuses: (statuses: OCRecord["status"][]) => void;
+  /** Select all records that are NOT "synced" status */
+  selectNonSynced: () => void;
   // Step management
   currentStep: WorkflowStep;
   setCurrentStep: (step: WorkflowStep) => void;
@@ -144,6 +146,13 @@ export function OCSyncProvider({ children }: { children: ReactNode }) {
     setSelectedRecords(new Set(records.filter(r => statuses.includes(r.status)).map(r => r.id)));
   }, [records]);
 
+  /** Select all records that are NOT "synced" */
+  const selectNonSynced = useCallback(() => {
+    setSelectedRecords(new Set(
+      records.filter(r => r.status !== "synced").map(r => r.id)
+    ));
+  }, [records]);
+
   const goToNextStep = useCallback(() => {
     setCurrentStep(prev => Math.min(prev + 1, 5) as WorkflowStep);
   }, []);
@@ -159,7 +168,7 @@ export function OCSyncProvider({ children }: { children: ReactNode }) {
       progress, setProgress,
       connectionStatus, setConnectionStatus,
       connectionError, setConnectionError,
-      selectedRecords, toggleSelection, selectAll, deselectAll, selectByStatus, selectMultipleStatuses,
+      selectedRecords, toggleSelection, selectAll, deselectAll, selectByStatus, selectMultipleStatuses, selectNonSynced,
       currentStep, setCurrentStep, goToNextStep, goToPrevStep,
       activeKPIFilter, setActiveKPIFilter,
     }}>

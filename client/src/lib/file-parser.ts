@@ -147,6 +147,27 @@ export function parseManualInput(text: string): OCRecord[] {
   return records;
 }
 
+/** Formatea fecha para exportación: si es "0000-00-00..." o vacía, retorna "" */
+function formatDateForExport(dateStr?: string): string {
+  if (!dateStr) return "";
+  if (dateStr.startsWith("0000-00-00") || dateStr === "0001-01-01T00:00:00") return "";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleDateString("es-CO", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }) + " " + d.toLocaleTimeString("es-CO", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
 export function exportToCSV(records: OCRecord[]): string {
   const headers = [
     "Cod. Comprador",
@@ -155,8 +176,10 @@ export function exportToCSV(records: OCRecord[]): string {
     "Estado",
     "Nombre Comprador",
     "Nombre Proveedor",
+    "Fecha Documento",
+    "Fecha Sincronización",
     "Proveedor Existe",
-    "Mensaje",
+    "Detalle",
   ];
 
   const statusLabels: Record<string, string> = {
@@ -176,6 +199,8 @@ export function exportToCSV(records: OCRecord[]): string {
     statusLabels[r.status || "pending"] || r.status,
     r.buyer_name || "",
     r.provider_name || "",
+    formatDateForExport(r.portalData?.documentDate),
+    formatDateForExport(r.portalData?.synchronizationDate),
     r.provider_exists === undefined ? "" : r.provider_exists ? "Sí" : "No",
     r.statusMessage || "",
   ]);

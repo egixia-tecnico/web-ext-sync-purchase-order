@@ -2,10 +2,10 @@
  * Home Page - Egixia OC Sync Mini App Beta
  * Experiencia por etapas con visibilidad condicional:
  * Step 1 (Cargar): Hero + DataUploader
- * Step 2 (Verificar): Tabla (todos seleccionados) + Botón verificar
- * Step 3 (Resultados): KPIs + Tabla con fechas + Exportar + Navegación
- * Step 4 (Sincronizar): KPIs + Tabla (errores primero, seleccionados) + Sincronizar
- * Step 5 (Exportar): KPIs + Tabla + Exportar final
+ * Step 2 (Verificar): Tabla (todos seleccionados) + Botón "Verificar pendientes"
+ * Step 3 (Resultados): KPIs clicables + Tabla con fechas + Exportar + Ir a sincronizar
+ * Step 4 (Sincronizar): KPIs + Tabla (errores/no encontradas seleccionados primero) + "Sincronizar X de Y"
+ * Step 5 (Exportar): KPIs + Tabla actualizada (sin checkboxes) + Exportar final
  */
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -177,7 +177,7 @@ export default function Home() {
           </motion.section>
         )}
 
-        {/* Connection error banner */}
+        {/* Connection error banner - only in step 1 */}
         {connectionStatus === "error" && connectionError && currentStep === 1 && (
           <div className="container mt-4">
             <motion.div
@@ -218,13 +218,13 @@ export default function Home() {
           {/* Step 1: Data uploader */}
           {currentStep === 1 && <DataUploader />}
 
-          {/* Step 3+: KPI Dashboard (hidden in step 2) */}
+          {/* Step 3, 4, 5: KPI Dashboard */}
           {currentStep >= 3 && <KPIDashboard />}
 
-          {/* Step 2+: Action bar */}
+          {/* Step 2, 3, 4: Action bar (controls differ by step) */}
           {currentStep >= 2 && <ActionBar />}
 
-          {/* Step 2+: Results table */}
+          {/* Step 2+: Results table (checkboxes hidden in step 5) */}
           {currentStep >= 2 && <ResultsTable />}
         </div>
       </main>

@@ -31,3 +31,10 @@
 - [x] Step Resultados: botones ir al paso anterior o siguiente
 - [x] Step Sincronizar: seleccionar por defecto registros con error y no encontradas, ordenar primero
 - [x] Step Sincronizar: botón "Sincronizar seleccionados X de Y", ejecutar sincronización y actualizar grid
+- [x] Fechas "0000-00-00T00:00:00" mostrar en blanco
+- [x] Unificar fechas en una sola columna (Fecha Doc / Fecha Sync)
+- [x] Exportar CSV con cada dato del grid en columnas independientes (Fecha Documento y Fecha Sincronización separadas)
+- [x] Step Resultados: seleccionar solo registros NO sincronizados, deseleccionar sincronizados
+- [x] Step Resultados: ordenar grid con no-sincronizados primero, sincronizados al final
+- [x] Botón Sincronizar muestra "Sincronizar X de Y" con conteo dinámico
+- [x] Al sincronizar pasa al step final Exportar con grid actualizado sin opción de re-sincronizar

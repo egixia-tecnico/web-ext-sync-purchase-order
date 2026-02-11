@@ -1,8 +1,9 @@
 /**
  * ActionBar - Barra de acciones contextual por step
  * Step 2 (Verificar): Botón "Verificar pendientes" → al completar avanza a Step 3
- * Step 3 (Resultados): Botón "Exportar todo", navegación anterior/siguiente
- * Step 4 (Sincronizar): Botón "Sincronizar seleccionados X de Y", selección por defecto de errores/no encontradas
+ * Step 3 (Resultados): Selecciona no-sincronizados, muestra "Exportar" y "Sincronizar"
+ * Step 4 (Sincronizar): Botón "Sincronizar X de Y" → ejecuta y pasa a Step 5
+ * Step 5 (Exportar): Grid actualizado con "Exportar resultados", sin opción de re-sincronizar
  */
 import { useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -21,22 +22,34 @@ import {
 export default function ActionBar() {
   const {
     records, isProcessing, progress, connectionStatus,
-    selectedRecords, selectAll, deselectAll, selectMultipleStatuses,
+    selectedRecords, selectAll, deselectAll, selectNonSynced, selectMultipleStatuses,
     currentStep, setCurrentStep, goToNextStep, goToPrevStep,
   } = useOCSync();
   const { verifyBatch } = useOCVerification();
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
-  const hasAutoSelectedForSync = useRef(false);
+  const hasAutoSelectedForStep3 = useRef(false);
+  const hasAutoSelectedForStep4 = useRef(false);
 
-  // When entering step 4, auto-select error and not_found records
+  // When entering step 3 (Resultados), auto-select non-synced records
   useEffect(() => {
-    if (currentStep === 4 && !hasAutoSelectedForSync.current) {
+    if (currentStep === 3 && !hasAutoSelectedForStep3.current) {
+      selectNonSynced();
+      hasAutoSelectedForStep3.current = true;
+    }
+    if (currentStep !== 3) {
+      hasAutoSelectedForStep3.current = false;
+    }
+  }, [currentStep, selectNonSynced]);
+
+  // When entering step 4 (Sincronizar), auto-select error and not_found records
+  useEffect(() => {
+    if (currentStep === 4 && !hasAutoSelectedForStep4.current) {
       selectMultipleStatuses(["error", "not_found", "supplier_not_exists", "synced_with_error"]);
-      hasAutoSelectedForSync.current = true;
+      hasAutoSelectedForStep4.current = true;
     }
     if (currentStep !== 4) {
-      hasAutoSelectedForSync.current = false;
+      hasAutoSelectedForStep4.current = false;
     }
   }, [currentStep, selectMultipleStatuses]);
 
@@ -54,7 +67,6 @@ export default function ActionBar() {
       return;
     }
 
-    // Verify all records (they should all be selected in step 2)
     const toVerify = records.filter(r => selectedRecords.has(r.id));
     await verifyBatch(toVerify);
 
@@ -76,6 +88,9 @@ export default function ActionBar() {
     const toSync = records.filter(r => selectedRecords.has(r.id));
     await verifyBatch(toSync);
     toast.success(`Sincronización completada para ${toSync.length} registros`, { position: "top-center" });
+
+    // After sync, advance to step 5 (Exportar) with updated grid
+    setCurrentStep(5);
   };
 
   const handleExport = () => {
@@ -143,7 +158,7 @@ export default function ActionBar() {
         </div>
       )}
 
-      {/* Step 3: Resultados */}
+      {/* Step 3: Resultados - con selección de no-sincronizados */}
       {currentStep === 3 && (
         <div className="flex flex-wrap items-center gap-3">
           <Button
@@ -168,18 +183,24 @@ export default function ActionBar() {
 
           <div className="flex-1" />
 
+          <span className="text-xs text-muted-foreground">
+            {selectedCount} de {totalCount} seleccionados (no sincronizados)
+          </span>
+
           <Button
             onClick={goToNextStep}
+            disabled={selectedCount === 0}
             className="gap-1.5 text-white"
             style={{ backgroundColor: `rgb(${r}, ${g}, ${b})` }}
           >
-            Sincronizar
+            <RefreshCw className="w-4 h-4" />
+            Sincronizar {selectedCount} de {totalCount}
             <ArrowRight className="w-3.5 h-3.5" />
           </Button>
         </div>
       )}
 
-      {/* Step 4: Sincronizar */}
+      {/* Step 4: Sincronizar - ejecuta la sincronización */}
       {currentStep === 4 && (
         <div className="flex flex-wrap items-center gap-3">
           <Button
@@ -203,17 +224,7 @@ export default function ActionBar() {
             ) : (
               <RefreshCw className="w-4 h-4" />
             )}
-            Sincronizar seleccionados {selectedCount} de {totalCount}
-          </Button>
-
-          <Button
-            onClick={handleExport}
-            disabled={isProcessing}
-            variant="outline"
-            className="gap-2"
-          >
-            <Download className="w-4 h-4" />
-            Exportar todo
+            Sincronizar {selectedCount} de {totalCount}
           </Button>
 
           <div className="flex-1" />
@@ -224,19 +235,9 @@ export default function ActionBar() {
         </div>
       )}
 
-      {/* Step 5: Exportar (final) */}
+      {/* Step 5: Exportar (final) - grid actualizado, sin opción de re-sincronizar */}
       {currentStep === 5 && (
         <div className="flex flex-wrap items-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={goToPrevStep}
-            className="gap-1.5 text-xs"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            Anterior
-          </Button>
-
           <Button
             onClick={handleExport}
             className="gap-2 text-white"
@@ -245,6 +246,12 @@ export default function ActionBar() {
             <Download className="w-4 h-4" />
             Exportar resultados ({totalCount})
           </Button>
+
+          <div className="flex-1" />
+
+          <span className="text-xs text-muted-foreground">
+            Sincronización completada · {totalCount} registros
+          </span>
         </div>
       )}
     </motion.div>

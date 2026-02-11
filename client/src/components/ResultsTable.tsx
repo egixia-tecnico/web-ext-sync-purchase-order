@@ -1,8 +1,10 @@
 /**
- * ResultsTable - Tabla de resultados con paginación configurable, scroll visible,
- * columnas de fecha documento y fecha sincronización.
+ * ResultsTable - Tabla de resultados con paginación configurable, scroll visible.
+ * Fechas "0000-00-00T00:00:00" se muestran en blanco.
+ * Fechas en una sola columna (Fecha Doc / Fecha Sync).
+ * Ordenamiento: no-sincronizados primero, sincronizados al final.
+ * En step 3+: registros "synced" deseleccionados, los demás seleccionados.
  * Filtro controlado por activeKPIFilter del contexto (clic en KPI cards).
- * Sin filtros rápidos propios - todo se controla desde los KPIs.
  */
 import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -69,8 +71,44 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: str
   },
 };
 
+/** Formatea fecha: si es "0000-00-00..." o vacía, retorna "" */
+function formatDate(dateStr?: string): string {
+  if (!dateStr) return "";
+  if (dateStr.startsWith("0000-00-00") || dateStr === "0001-01-01T00:00:00") return "";
+  // Try to format nicely
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleDateString("es-CO", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }) + " " + d.toLocaleTimeString("es-CO", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
+/** Priority for sorting: lower = first (non-synced first) */
+const STATUS_SORT_PRIORITY: Record<string, number> = {
+  error: 0,
+  not_found: 1,
+  supplier_not_exists: 2,
+  synced_with_error: 3,
+  pending: 4,
+  checking: 5,
+  synced: 6,
+};
+
 export default function ResultsTable() {
-  const { records, selectedRecords, toggleSelection, selectAll, deselectAll, activeKPIFilter, currentStep } = useOCSync();
+  const {
+    records, selectedRecords, toggleSelection, selectAll, deselectAll,
+    selectNonSynced, activeKPIFilter, currentStep
+  } = useOCSync();
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState<keyof OCRecord>("purchase_order_number");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -102,35 +140,18 @@ export default function ResultsTable() {
       );
     }
 
-    // In step 4 (Sincronizar), sort errors and not_found first
-    if (currentStep === 4) {
-      const statusPriority: Record<string, number> = {
-        error: 0,
-        not_found: 1,
-        supplier_not_exists: 2,
-        synced_with_error: 3,
-        pending: 4,
-        checking: 5,
-        synced: 6,
-      };
-      result.sort((a, b) => {
-        const aPri = statusPriority[a.status || "pending"] ?? 4;
-        const bPri = statusPriority[b.status || "pending"] ?? 4;
-        if (aPri !== bPri) return aPri - bPri;
-        const aVal = String(a[sortField] || "");
-        const bVal = String(b[sortField] || "");
-        return sortDir === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-      });
-    } else {
-      result.sort((a, b) => {
-        const aVal = String(a[sortField] || "");
-        const bVal = String(b[sortField] || "");
-        return sortDir === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-      });
-    }
+    // Always sort: non-synced first, synced last
+    result.sort((a, b) => {
+      const aPri = STATUS_SORT_PRIORITY[a.status || "pending"] ?? 4;
+      const bPri = STATUS_SORT_PRIORITY[b.status || "pending"] ?? 4;
+      if (aPri !== bPri) return aPri - bPri;
+      const aVal = String(a[sortField] || "");
+      const bVal = String(b[sortField] || "");
+      return sortDir === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+    });
 
     return result;
-  }, [records, searchTerm, activeKPIFilter, sortField, sortDir, currentStep]);
+  }, [records, searchTerm, activeKPIFilter, sortField, sortDir]);
 
   const paginatedRecords = useMemo(() => {
     return filteredRecords.slice(page * pageSize, (page + 1) * pageSize);
@@ -139,7 +160,6 @@ export default function ResultsTable() {
   const totalPages = Math.ceil(filteredRecords.length / pageSize);
 
   if (records.length === 0) return null;
-  // In step 2 (Verificar), show the table but simplified
   if (currentStep < 2) return null;
 
   const allFilteredSelected = filteredRecords.length > 0 && filteredRecords.every(r => selectedRecords.has(r.id));
@@ -157,12 +177,9 @@ export default function ResultsTable() {
   const handleSelectAllFiltered = () => {
     if (allFilteredSelected) {
       // Deselect all filtered
-      const filteredIds = new Set(filteredRecords.map(r => r.id));
-      const newSelection = new Set(Array.from(selectedRecords).filter(id => !filteredIds.has(id)));
-      // We need to use deselectAll and then re-add non-filtered
       deselectAll();
     } else {
-      // Select all filtered (add to existing selection)
+      // Select all filtered
       const newIds = filteredRecords.map(r => r.id);
       newIds.forEach(id => {
         if (!selectedRecords.has(id)) {
@@ -177,8 +194,10 @@ export default function ResultsTable() {
     return sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />;
   };
 
-  // Show date columns only in step 3+ (after verification)
-  const showDateColumns = currentStep >= 3;
+  // Show date column only in step 3+ (after verification)
+  const showDateColumn = currentStep >= 3;
+  // In step 5 (Exportar), hide checkboxes
+  const showCheckboxes = currentStep !== 5;
 
   return (
     <motion.div
@@ -187,7 +206,7 @@ export default function ResultsTable() {
       transition={{ duration: 0.3, delay: 0.1 }}
       className="bg-card rounded-xl border shadow-sm overflow-hidden"
     >
-      {/* Toolbar - search only, no status filter dropdown */}
+      {/* Toolbar */}
       <div className="p-3 border-b flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -219,16 +238,18 @@ export default function ResultsTable() {
       </div>
 
       {/* Table with visible scroll */}
-      <div className="overflow-auto max-h-[500px]" style={{ scrollbarWidth: "thin" }}>
+      <div className="overflow-auto max-h-[500px]" style={{ scrollbarWidth: "thin", scrollbarColor: "#c4c4c4 transparent" }}>
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm z-10">
             <tr className="text-left">
-              <th className="p-3 w-10">
-                <Checkbox
-                  checked={allFilteredSelected}
-                  onCheckedChange={handleSelectAllFiltered}
-                />
-              </th>
+              {showCheckboxes && (
+                <th className="p-3 w-10">
+                  <Checkbox
+                    checked={allFilteredSelected}
+                    onCheckedChange={handleSelectAllFiltered}
+                  />
+                </th>
+              )}
               <th className="p-3 cursor-pointer select-none hover:text-foreground" onClick={() => handleSort("purchase_order_number")}>
                 <div className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Nro. OC <SortIcon field="purchase_order_number" />
@@ -249,19 +270,12 @@ export default function ResultsTable() {
                   Estado
                 </div>
               </th>
-              {showDateColumns && (
-                <>
-                  <th className="p-3 hidden md:table-cell">
-                    <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Fecha Doc.
-                    </div>
-                  </th>
-                  <th className="p-3 hidden md:table-cell">
-                    <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Fecha Sync
-                    </div>
-                  </th>
-                </>
+              {showDateColumn && (
+                <th className="p-3">
+                  <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Fechas
+                  </div>
+                </th>
               )}
               <th className="p-3 hidden lg:table-cell">
                 <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -275,6 +289,8 @@ export default function ResultsTable() {
               {paginatedRecords.map((record, idx) => {
                 const config = STATUS_CONFIG[record.status || "pending"];
                 const isSelected = selectedRecords.has(record.id);
+                const docDate = formatDate(record.portalData?.documentDate);
+                const syncDate = formatDate(record.portalData?.synchronizationDate);
 
                 return (
                   <motion.tr
@@ -289,12 +305,14 @@ export default function ResultsTable() {
                     `}
                     style={{ borderLeft: `3px solid ${config.borderColor}` }}
                   >
-                    <td className="p-3">
-                      <Checkbox
-                        checked={isSelected}
-                        onCheckedChange={() => toggleSelection(record.id)}
-                      />
-                    </td>
+                    {showCheckboxes && (
+                      <td className="p-3">
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => toggleSelection(record.id)}
+                        />
+                      </td>
+                    )}
                     <td className="p-3">
                       <span className="font-mono text-xs font-medium">{record.purchase_order_number}</span>
                     </td>
@@ -320,19 +338,26 @@ export default function ResultsTable() {
                         <span className="hidden sm:inline">{config.label}</span>
                       </span>
                     </td>
-                    {showDateColumns && (
-                      <>
-                        <td className="p-3 hidden md:table-cell">
-                          <span className="text-xs text-muted-foreground font-mono">
-                            {record.portalData?.documentDate || "—"}
-                          </span>
-                        </td>
-                        <td className="p-3 hidden md:table-cell">
-                          <span className="text-xs text-muted-foreground font-mono">
-                            {record.portalData?.synchronizationDate || "—"}
-                          </span>
-                        </td>
-                      </>
+                    {showDateColumn && (
+                      <td className="p-3">
+                        <div className="space-y-0.5">
+                          {docDate && (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-muted-foreground/60 uppercase w-8 shrink-0">Doc</span>
+                              <span className="text-xs text-muted-foreground font-mono">{docDate}</span>
+                            </div>
+                          )}
+                          {syncDate && (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-muted-foreground/60 uppercase w-8 shrink-0">Sync</span>
+                              <span className="text-xs text-muted-foreground font-mono">{syncDate}</span>
+                            </div>
+                          )}
+                          {!docDate && !syncDate && (
+                            <span className="text-xs text-muted-foreground/40">—</span>
+                          )}
+                        </div>
+                      </td>
                     )}
                     <td className="p-3 hidden lg:table-cell">
                       {record.statusMessage ? (
@@ -361,7 +386,7 @@ export default function ResultsTable() {
       {/* Pagination */}
       <div className="p-3 border-t flex items-center justify-between">
         <span className="text-xs text-muted-foreground">
-          Mostrando {page * pageSize + 1}-{Math.min((page + 1) * pageSize, filteredRecords.length)} de {filteredRecords.length}
+          Mostrando {filteredRecords.length > 0 ? page * pageSize + 1 : 0}-{Math.min((page + 1) * pageSize, filteredRecords.length)} de {filteredRecords.length}
         </span>
         <div className="flex items-center gap-1">
           <Button
