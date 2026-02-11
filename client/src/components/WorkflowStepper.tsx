@@ -1,31 +1,35 @@
 /**
  * WorkflowStepper - Indicador visual del flujo de trabajo
- * Design: "Operational Clarity" - stepper horizontal con estados
+ * Usa currentStep del contexto centralizado.
+ * Permite clic en steps completados para navegar hacia atrás.
  */
 import { motion } from "framer-motion";
-import { useOCSync } from "@/contexts/OCSyncContext";
+import { useOCSync, type WorkflowStep } from "@/contexts/OCSyncContext";
 import { useThemeColor } from "@/contexts/ThemeColorContext";
 import { Upload, Search, BarChart3, RefreshCw, Download, Check } from "lucide-react";
 
 const STEPS = [
-  { id: 1, label: "Cargar datos", icon: Upload },
-  { id: 2, label: "Verificar", icon: Search },
-  { id: 3, label: "Resultados", icon: BarChart3 },
-  { id: 4, label: "Sincronizar", icon: RefreshCw },
-  { id: 5, label: "Exportar", icon: Download },
+  { id: 1 as WorkflowStep, label: "Cargar datos", icon: Upload },
+  { id: 2 as WorkflowStep, label: "Verificar", icon: Search },
+  { id: 3 as WorkflowStep, label: "Resultados", icon: BarChart3 },
+  { id: 4 as WorkflowStep, label: "Sincronizar", icon: RefreshCw },
+  { id: 5 as WorkflowStep, label: "Exportar", icon: Download },
 ];
 
 export default function WorkflowStepper() {
-  const { records, kpi, isProcessing } = useOCSync();
+  const { currentStep, setCurrentStep, records } = useOCSync();
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
 
-  // Determine current step
-  let currentStep = 1;
-  if (records.length > 0) currentStep = 2;
-  if (kpi.synced > 0 || kpi.notFound > 0 || kpi.error > 0 || kpi.supplierNotExists > 0) currentStep = 3;
-  if (kpi.synced > 0 && kpi.pending === 0) currentStep = 4;
-  if (kpi.pending === 0 && kpi.checking === 0 && records.length > 0) currentStep = 5;
+  // Determine the highest step the user has reached (to allow going back)
+  const maxReachableStep = currentStep;
+
+  const handleStepClick = (stepId: WorkflowStep) => {
+    // Only allow clicking on completed steps or current step
+    if (stepId <= maxReachableStep && records.length > 0) {
+      setCurrentStep(stepId);
+    }
+  };
 
   return (
     <motion.div
@@ -38,11 +42,15 @@ export default function WorkflowStepper() {
         {STEPS.map((step, idx) => {
           const isActive = step.id === currentStep;
           const isCompleted = step.id < currentStep;
+          const isClickable = step.id <= maxReachableStep && records.length > 0;
           const Icon = step.icon;
 
           return (
             <div key={step.id} className="flex items-center flex-1 last:flex-none">
-              <div className="flex flex-col items-center gap-1.5">
+              <div
+                className={`flex flex-col items-center gap-1.5 ${isClickable ? "cursor-pointer" : ""}`}
+                onClick={() => isClickable && handleStepClick(step.id)}
+              >
                 <motion.div
                   animate={{
                     scale: isActive ? 1.1 : 1,
@@ -53,7 +61,7 @@ export default function WorkflowStepper() {
                         : "#e2e8f0",
                   }}
                   transition={{ duration: 0.3 }}
-                  className="w-8 h-8 rounded-full flex items-center justify-center"
+                  className={`w-8 h-8 rounded-full flex items-center justify-center ${isClickable && !isActive ? "hover:scale-105 transition-transform" : ""}`}
                 >
                   {isCompleted ? (
                     <Check className="w-4 h-4 text-white" />

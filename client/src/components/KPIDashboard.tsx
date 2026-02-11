@@ -1,9 +1,11 @@
 /**
  * KPIDashboard - Tarjetas KPI con indicadores semánticos
- * Design: "Operational Clarity" - tarjetas con borde superior grueso del color semántico
+ * Solo visible en Step 3 (Resultados) y Step 4 (Sincronizar)
+ * Al hacer clic en un KPI, filtra la tabla por ese estado.
  */
 import { motion } from "framer-motion";
 import { useOCSync } from "@/contexts/OCSyncContext";
+import { useThemeColor } from "@/contexts/ThemeColorContext";
 import {
   Package, CheckCircle2, XCircle, UserX, AlertTriangle,
   Clock, Loader2, AlertOctagon
@@ -17,11 +19,14 @@ interface KPICardProps {
   bgColor: string;
   icon: React.ReactNode;
   delay: number;
+  isActive?: boolean;
   onClick?: () => void;
 }
 
-function KPICard({ label, value, total, color, bgColor, icon, delay, onClick }: KPICardProps) {
+function KPICard({ label, value, total, color, bgColor, icon, delay, isActive, onClick }: KPICardProps) {
   const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+  const { primaryRgb } = useThemeColor();
+  const { r, g, b } = primaryRgb;
 
   return (
     <motion.div
@@ -31,8 +36,10 @@ function KPICard({ label, value, total, color, bgColor, icon, delay, onClick }: 
       onClick={onClick}
       className={`
         bg-card rounded-xl border shadow-sm overflow-hidden
-        ${onClick ? "cursor-pointer hover:shadow-md transition-shadow" : ""}
+        ${onClick ? "cursor-pointer hover:shadow-md transition-all" : ""}
+        ${isActive ? "ring-2 ring-offset-1" : ""}
       `}
+      style={isActive ? { borderColor: color, boxShadow: `0 0 0 2px ${color}33` } : undefined}
     >
       <div className="h-1" style={{ backgroundColor: color }} />
       <div className="p-4">
@@ -80,11 +87,20 @@ function KPICard({ label, value, total, color, bgColor, icon, delay, onClick }: 
 }
 
 export default function KPIDashboard() {
-  const { kpi, records, selectByStatus, deselectAll } = useOCSync();
+  const { kpi, records, activeKPIFilter, setActiveKPIFilter, currentStep } = useOCSync();
 
-  if (records.length === 0) return null;
+  // Only show in step 3 (Resultados) and step 4 (Sincronizar) and step 5 (Exportar)
+  if (records.length === 0 || currentStep < 3) return null;
 
-  const cards: Omit<KPICardProps, "delay">[] = [
+  const handleKPIClick = (filterKey: string | null) => {
+    if (activeKPIFilter === filterKey) {
+      setActiveKPIFilter(null); // Toggle off
+    } else {
+      setActiveKPIFilter(filterKey);
+    }
+  };
+
+  const cards: (Omit<KPICardProps, "delay"> & { filterKey: string | null })[] = [
     {
       label: "Total OC",
       value: kpi.total,
@@ -92,7 +108,9 @@ export default function KPIDashboard() {
       color: "#64748b",
       bgColor: "#f1f5f9",
       icon: <Package className="w-4 h-4 text-slate-500" />,
-      onClick: () => deselectAll(),
+      isActive: activeKPIFilter === null,
+      filterKey: null,
+      onClick: () => handleKPIClick(null),
     },
     {
       label: "Sincronizadas",
@@ -101,7 +119,9 @@ export default function KPIDashboard() {
       color: "#10b981",
       bgColor: "#ecfdf5",
       icon: <CheckCircle2 className="w-4 h-4 text-emerald-500" />,
-      onClick: () => selectByStatus("synced"),
+      isActive: activeKPIFilter === "synced",
+      filterKey: "synced",
+      onClick: () => handleKPIClick("synced"),
     },
     {
       label: "No encontradas",
@@ -110,7 +130,9 @@ export default function KPIDashboard() {
       color: "#f59e0b",
       bgColor: "#fffbeb",
       icon: <XCircle className="w-4 h-4 text-amber-500" />,
-      onClick: () => selectByStatus("not_found"),
+      isActive: activeKPIFilter === "not_found",
+      filterKey: "not_found",
+      onClick: () => handleKPIClick("not_found"),
     },
     {
       label: "Proveedor no existe",
@@ -119,7 +141,9 @@ export default function KPIDashboard() {
       color: "#ef4444",
       bgColor: "#fef2f2",
       icon: <UserX className="w-4 h-4 text-red-500" />,
-      onClick: () => selectByStatus("supplier_not_exists"),
+      isActive: activeKPIFilter === "supplier_not_exists",
+      filterKey: "supplier_not_exists",
+      onClick: () => handleKPIClick("supplier_not_exists"),
     },
     {
       label: "Error sistema",
@@ -128,47 +152,28 @@ export default function KPIDashboard() {
       color: "#dc2626",
       bgColor: "#fef2f2",
       icon: <AlertOctagon className="w-4 h-4 text-red-600" />,
-      onClick: () => selectByStatus("error"),
-    },
-    {
-      label: "Sync con error",
-      value: kpi.syncedWithError,
-      total: kpi.total,
-      color: "#f97316",
-      bgColor: "#fff7ed",
-      icon: <AlertTriangle className="w-4 h-4 text-orange-500" />,
-      onClick: () => selectByStatus("synced_with_error"),
-    },
-    {
-      label: "Pendientes",
-      value: kpi.pending,
-      total: kpi.total,
-      color: "#94a3b8",
-      bgColor: "#f8fafc",
-      icon: <Clock className="w-4 h-4 text-slate-400" />,
-      onClick: () => selectByStatus("pending"),
-    },
-    {
-      label: "Verificando",
-      value: kpi.checking,
-      total: kpi.total,
-      color: "#6366f1",
-      bgColor: "#eef2ff",
-      icon: <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />,
-      onClick: () => selectByStatus("checking"),
+      isActive: activeKPIFilter === "error",
+      filterKey: "error",
+      onClick: () => handleKPIClick("error"),
     },
   ];
 
   // Only show cards that have values or are important
-  const visibleCards = cards.filter(c => 
-    c.value > 0 || ["Total OC", "Sincronizadas", "No encontradas", "Proveedor no existe", "Pendientes"].includes(c.label)
+  const visibleCards = cards.filter(c =>
+    c.value > 0 || ["Total OC", "Sincronizadas", "No encontradas", "Proveedor no existe"].includes(c.label)
   );
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-      {visibleCards.map((card, i) => (
-        <KPICard key={card.label} {...card} delay={i * 0.08} />
-      ))}
-    </div>
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {visibleCards.map((card, i) => (
+          <KPICard key={card.label} {...card} delay={i * 0.08} />
+        ))}
+      </div>
+    </motion.div>
   );
 }

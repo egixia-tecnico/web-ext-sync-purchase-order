@@ -1,10 +1,8 @@
 /**
  * OCSyncContext - Store principal para la Mini App de verificación de OC
  * 
- * Ahora usa tRPC para comunicarse con el backend proxy.
- * Las credenciales se almacenan en la base de datos del servidor.
- * Token dinámico manejado server-side con renovación automática en error 401.
- * Al cargar datos, todos los registros quedan seleccionados por defecto.
+ * Centraliza el currentStep para controlar la visibilidad de componentes por etapa.
+ * Steps: 1=Cargar, 2=Verificar, 3=Resultados, 4=Sincronizar, 5=Exportar
  */
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
 
@@ -43,6 +41,8 @@ export interface KPIData {
 
 export type ConnectionStatus = "idle" | "connecting" | "connected" | "error" | "disconnected";
 
+export type WorkflowStep = 1 | 2 | 3 | 4 | 5;
+
 interface OCSyncContextType {
   records: OCRecord[];
   setRecords: (records: OCRecord[]) => void;
@@ -62,6 +62,15 @@ interface OCSyncContextType {
   selectAll: () => void;
   deselectAll: () => void;
   selectByStatus: (status: OCRecord["status"]) => void;
+  selectMultipleStatuses: (statuses: OCRecord["status"][]) => void;
+  // Step management
+  currentStep: WorkflowStep;
+  setCurrentStep: (step: WorkflowStep) => void;
+  goToNextStep: () => void;
+  goToPrevStep: () => void;
+  // KPI filter for results step
+  activeKPIFilter: string | null;
+  setActiveKPIFilter: (filter: string | null) => void;
 }
 
 const OCSyncContext = createContext<OCSyncContextType | null>(null);
@@ -73,11 +82,16 @@ export function OCSyncProvider({ children }: { children: ReactNode }) {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("idle");
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [selectedRecords, setSelectedRecords] = useState<Set<string>>(new Set());
+  const [currentStep, setCurrentStep] = useState<WorkflowStep>(1);
+  const [activeKPIFilter, setActiveKPIFilter] = useState<string | null>(null);
 
-  /** Al cargar datos, todos los registros quedan seleccionados por defecto */
+  /** Al cargar datos, todos los registros quedan seleccionados y se avanza al step 2 */
   const setRecords = useCallback((newRecords: OCRecord[]) => {
     setRecordsState(newRecords);
     setSelectedRecords(new Set(newRecords.map(r => r.id)));
+    if (newRecords.length > 0) {
+      setCurrentStep(2);
+    }
   }, []);
 
   const updateRecord = useCallback((id: string, updates: Partial<OCRecord>) => {
@@ -126,6 +140,18 @@ export function OCSyncProvider({ children }: { children: ReactNode }) {
     setSelectedRecords(new Set(records.filter(r => r.status === status).map(r => r.id)));
   }, [records]);
 
+  const selectMultipleStatuses = useCallback((statuses: OCRecord["status"][]) => {
+    setSelectedRecords(new Set(records.filter(r => statuses.includes(r.status)).map(r => r.id)));
+  }, [records]);
+
+  const goToNextStep = useCallback(() => {
+    setCurrentStep(prev => Math.min(prev + 1, 5) as WorkflowStep);
+  }, []);
+
+  const goToPrevStep = useCallback(() => {
+    setCurrentStep(prev => Math.max(prev - 1, 1) as WorkflowStep);
+  }, []);
+
   return (
     <OCSyncContext.Provider value={{
       records, setRecords, updateRecord, updateRecordsBatch, kpi,
@@ -133,7 +159,9 @@ export function OCSyncProvider({ children }: { children: ReactNode }) {
       progress, setProgress,
       connectionStatus, setConnectionStatus,
       connectionError, setConnectionError,
-      selectedRecords, toggleSelection, selectAll, deselectAll, selectByStatus,
+      selectedRecords, toggleSelection, selectAll, deselectAll, selectByStatus, selectMultipleStatuses,
+      currentStep, setCurrentStep, goToNextStep, goToPrevStep,
+      activeKPIFilter, setActiveKPIFilter,
     }}>
       {children}
     </OCSyncContext.Provider>

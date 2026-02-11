@@ -24,3 +24,10 @@
 - [x] Auto-conexión al iniciar con credenciales de DB
 - [x] Tests de Vitest (11 tests pasando)
 - [x] BUG: Conexión falla en producción (publicado) - corregido: upsertApiConfig duplicaba registros, testConnection enviaba undefined, agregado logging detallado
+- [x] Eliminar filtros rápidos (Todos, No encontradas, Sin proveedor) de la tabla
+- [x] Step Verificar: ocultar KPIs y botón exportar, mostrar solo botón "Verificar pendientes"
+- [x] Step Resultados: mostrar KPIs (sincronizadas, no encontradas, proveedor no existente), clic en KPI filtra grid, habilitar exportar, mostrar fecha documento y fecha sincronización
+- [x] Step Resultados: paginación de 10 registros por defecto, opción hasta 200, scroll visible
+- [x] Step Resultados: botones ir al paso anterior o siguiente
+- [x] Step Sincronizar: seleccionar por defecto registros con error y no encontradas, ordenar primero
+- [x] Step Sincronizar: botón "Sincronizar seleccionados X de Y", ejecutar sincronización y actualizar grid
