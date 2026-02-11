@@ -1,8 +1,8 @@
 /**
  * ActionBar - Barra de acciones contextual por step
  * Step 2 (Verificar): Botón "Verificar pendientes" → al completar avanza a Step 3
- * Step 3 (Resultados): Selecciona no-sincronizados, muestra "Exportar" y "Sincronizar"
- * Step 4 (Sincronizar): Botón "Sincronizar X de Y" → ejecuta y pasa a Step 5
+ * Step 3 (Resultados): "Exportar" + "Sincronizar X de Y" → al clic pasa a Step 4 y ejecuta automáticamente
+ * Step 4 (Sincronizar): Progreso automático de sincronización → al completar pasa a Step 5
  * Step 5 (Exportar): Grid actualizado con "Exportar resultados", sin opción de re-sincronizar
  */
 import { useEffect, useRef } from "react";
@@ -29,7 +29,7 @@ export default function ActionBar() {
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
   const hasAutoSelectedForStep3 = useRef(false);
-  const hasAutoSelectedForStep4 = useRef(false);
+  const syncTriggered = useRef(false);
 
   // When entering step 3 (Resultados), auto-select non-synced records
   useEffect(() => {
@@ -42,16 +42,16 @@ export default function ActionBar() {
     }
   }, [currentStep, selectNonSynced]);
 
-  // When entering step 4 (Sincronizar), auto-select error and not_found records
+  // When entering step 4 (Sincronizar), auto-execute sync immediately
   useEffect(() => {
-    if (currentStep === 4 && !hasAutoSelectedForStep4.current) {
-      selectMultipleStatuses(["error", "not_found", "supplier_not_exists", "synced_with_error"]);
-      hasAutoSelectedForStep4.current = true;
+    if (currentStep === 4 && !syncTriggered.current && !isProcessing) {
+      syncTriggered.current = true;
+      handleAutoSync();
     }
     if (currentStep !== 4) {
-      hasAutoSelectedForStep4.current = false;
+      syncTriggered.current = false;
     }
-  }, [currentStep, selectMultipleStatuses]);
+  }, [currentStep]);
 
   if (records.length === 0) return null;
   if (currentStep < 2) return null;
@@ -74,7 +74,8 @@ export default function ActionBar() {
     setCurrentStep(3);
   };
 
-  const handleSync = async () => {
+  // Triggered when user clicks "Sincronizar X de Y" in step 3
+  const handleGoToSync = () => {
     if (connectionStatus !== "connected") {
       toast.error("No hay conexión con la API. Configure las credenciales primero.", { position: "top-center" });
       return;
@@ -85,7 +86,25 @@ export default function ActionBar() {
       return;
     }
 
+    // Move to step 4 - the useEffect will auto-trigger the sync
+    setCurrentStep(4);
+  };
+
+  // Auto-executed when step 4 is entered
+  const handleAutoSync = async () => {
+    if (connectionStatus !== "connected") {
+      toast.error("No hay conexión con la API. Configure las credenciales primero.", { position: "top-center" });
+      setCurrentStep(3);
+      return;
+    }
+
     const toSync = records.filter(r => selectedRecords.has(r.id));
+    if (toSync.length === 0) {
+      toast.warning("No hay registros seleccionados para sincronizar", { position: "top-center" });
+      setCurrentStep(3);
+      return;
+    }
+
     await verifyBatch(toSync);
     toast.success(`Sincronización completada para ${toSync.length} registros`, { position: "top-center" });
 
@@ -120,7 +139,7 @@ export default function ActionBar() {
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-medium text-muted-foreground flex items-center gap-2">
                 <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: `rgb(${r}, ${g}, ${b})` }} />
-                Procesando {progress.current} de {progress.total}...
+                {currentStep === 4 ? "Sincronizando" : "Procesando"} {progress.current} de {progress.total}...
               </span>
               <span className="text-xs font-mono text-muted-foreground">{progressPercent}%</span>
             </div>
@@ -158,7 +177,7 @@ export default function ActionBar() {
         </div>
       )}
 
-      {/* Step 3: Resultados - con selección de no-sincronizados */}
+      {/* Step 3: Resultados - Exportar + Sincronizar X de Y */}
       {currentStep === 3 && (
         <div className="flex flex-wrap items-center gap-3">
           <Button
@@ -188,49 +207,27 @@ export default function ActionBar() {
           </span>
 
           <Button
-            onClick={goToNextStep}
-            disabled={selectedCount === 0}
+            onClick={handleGoToSync}
+            disabled={selectedCount === 0 || isProcessing}
             className="gap-1.5 text-white"
             style={{ backgroundColor: `rgb(${r}, ${g}, ${b})` }}
           >
             <RefreshCw className="w-4 h-4" />
             Sincronizar {selectedCount} de {totalCount}
-            <ArrowRight className="w-3.5 h-3.5" />
           </Button>
         </div>
       )}
 
-      {/* Step 4: Sincronizar - ejecuta la sincronización */}
+      {/* Step 4: Sincronizar - ejecución automática, solo muestra progreso */}
       {currentStep === 4 && (
         <div className="flex flex-wrap items-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={goToPrevStep}
-            className="gap-1.5 text-xs"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            Anterior
-          </Button>
-
-          <Button
-            onClick={handleSync}
-            disabled={isProcessing || selectedCount === 0}
-            className="gap-2 text-white"
-            style={{ backgroundColor: `rgb(${r}, ${g}, ${b})` }}
-          >
-            {isProcessing ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4" />
-            )}
-            Sincronizar {selectedCount} de {totalCount}
-          </Button>
-
+          <span className="text-sm font-medium flex items-center gap-2" style={{ color: `rgb(${r}, ${g}, ${b})` }}>
+            <RefreshCw className="w-4 h-4 animate-spin" />
+            Sincronizando registros...
+          </span>
           <div className="flex-1" />
-
           <span className="text-xs text-muted-foreground">
-            {selectedCount} de {totalCount} seleccionados
+            Procesando {selectedCount} registros seleccionados
           </span>
         </div>
       )}

@@ -38,3 +38,4 @@
 - [x] Step Resultados: ordenar grid con no-sincronizados primero, sincronizados al final
 - [x] Botón Sincronizar muestra "Sincronizar X de Y" con conteo dinámico
 - [x] Al sincronizar pasa al step final Exportar con grid actualizado sin opción de re-sincronizar
+- [x] Botón "Sincronizar X de Y" en step Resultados pasa directamente al step Sincronizar y ejecuta integración automáticamente sin botones adicionales
