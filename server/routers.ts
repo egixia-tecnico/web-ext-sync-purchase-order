@@ -326,8 +326,8 @@ export const appRouter = router({
             batch.map(async (record) => {
               try {
                 const result = await callEgixiaApi("get", "apimanager/purchase_order_v1/list", config, {
-                  buyer_external_code: record.buyerCode,
-                  purchase_order_number: record.purchaseOrderNumber,
+                  buyer_external_code: record.buyerCode.trim(),
+                  purchase_order_number: record.purchaseOrderNumber.trim(),
                 });
 
                 const data = result.data as any;
@@ -397,7 +397,7 @@ export const appRouter = router({
                 try {
                   const result = await callEgixiaApi("post", "ApiManager/suppliers_v3/supplier_exists", config, undefined, {
                     Provider: [{
-                      provider_external_code_1: supplierCode,
+                      provider_external_code_1: supplierCode.trim(),
                       provider_external_code_2: "",
                       ProveedorCodigoExterno3: "",
                     }],

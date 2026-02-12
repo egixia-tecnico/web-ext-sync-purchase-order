@@ -39,3 +39,4 @@
 - [x] Botón Sincronizar muestra "Sincronizar X de Y" con conteo dinámico
 - [x] Al sincronizar pasa al step final Exportar con grid actualizado sin opción de re-sincronizar
 - [x] Botón "Sincronizar X de Y" en step Resultados pasa directamente al step Sincronizar y ejecuta integración automáticamente sin botones adicionales
+- [x] BUG: Proveedor 1204860 se marca como "no existe" - corregido: aplicado trim() a todos los códigos antes de enviar a API
