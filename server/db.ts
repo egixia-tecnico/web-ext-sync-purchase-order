@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, apiConfigs, InsertApiConfig, verificationLogs } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -148,4 +148,17 @@ export async function saveVerificationLog(log: {
   if (!db) return;
 
   await db.insert(verificationLogs).values(log);
+}
+
+export async function getVerificationHistory(limit: number = 20) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const logs = await db
+    .select()
+    .from(verificationLogs)
+    .orderBy(desc(verificationLogs.createdAt))
+    .limit(limit);
+
+  return logs;
 }

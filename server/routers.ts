@@ -3,7 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { getDefaultApiConfig, upsertApiConfig, saveVerificationLog } from "./db";
+import { getDefaultApiConfig, upsertApiConfig, saveVerificationLog, getVerificationHistory } from "./db";
 import axios from "axios";
 
 // ===== Token management (server-side) =====
@@ -395,13 +395,11 @@ export const appRouter = router({
             const supplierResults = await Promise.allSettled(
               supplierBatch.map(async (supplierCode) => {
                 try {
-                  const result = await callEgixiaApi("post", "ApiManager/suppliers_v3/supplier_exists", config, undefined, {
-                    Provider: [{
-                      provider_external_code_1: supplierCode.trim(),
-                      provider_external_code_2: "",
-                      ProveedorCodigoExterno3: "",
-                    }],
-                  });
+                  const result = await callEgixiaApi("post", "ApiManager/suppliers_v3/supplier_exists", config, undefined, [{
+                    provider_external_code_1: supplierCode.trim(),
+                    provider_external_code_2: "",
+                    provider_external_code_3: "",
+                  }]);
 
                   const data = result.data as any;
                   const providers = data?.outlist_provider || [];
@@ -504,6 +502,21 @@ export const appRouter = router({
         } catch (error: any) {
           return { success: false, error: error?.message || "Error al verificar proveedor" };
         }
+      }),
+
+    getVerificationHistory: publicProcedure
+      .query(async () => {
+        const logs = await getVerificationHistory(20);
+        return logs.map(log => ({
+          id: log.id,
+          totalRecords: log.totalRecords,
+          syncedCount: log.synced,
+          notFoundCount: log.notFound,
+          supplierNotExistsCount: log.supplierNotExists,
+          errorCount: log.errors,
+          durationMs: log.executionTimeMs,
+          executedAt: log.createdAt,
+        }));
       }),
   }),
 });

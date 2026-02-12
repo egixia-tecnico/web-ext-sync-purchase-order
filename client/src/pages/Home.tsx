@@ -12,6 +12,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { motion } from "framer-motion";
 import AppHeader from "@/components/AppHeader";
 import ApiConfigDialog from "@/components/ApiConfigDialog";
+import HistoryDialog from "@/components/HistoryDialog";
 import WorkflowStepper from "@/components/WorkflowStepper";
 import DataUploader from "@/components/DataUploader";
 import KPIDashboard from "@/components/KPIDashboard";
@@ -27,6 +28,7 @@ export default function Home() {
   let { user, loading, error, isAuthenticated, logout } = useAuth();
 
   const [showApiConfig, setShowApiConfig] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const { records, connectionStatus, connectionError, setConnectionStatus, setConnectionError, currentStep } = useOCSync();
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
@@ -83,8 +85,9 @@ export default function Home() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <AppHeader onSettingsClick={() => setShowApiConfig(true)} />
+      <AppHeader onSettingsClick={() => setShowApiConfig(true)} onHistoryClick={() => setShowHistory(true)} />
       <ApiConfigDialog open={showApiConfig} onOpenChange={setShowApiConfig} />
+      <HistoryDialog open={showHistory} onOpenChange={setShowHistory} />
 
       <main className="flex-1">
         {/* Hero section - only in Step 1 (no data loaded) */}

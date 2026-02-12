@@ -1,18 +1,26 @@
 /**
  * AppHeader - Header de la Mini App con branding Egixia
  * Design: "Operational Clarity" - barra superior con color primario configurable
- * Incluye indicador de estado de conexión
+ * Incluye indicador de estado de conexión y menú desplegable
  */
 import { useThemeColor } from "@/contexts/ThemeColorContext";
 import { useOCSync } from "@/contexts/OCSyncContext";
-import { Settings2, RefreshCw, Wifi, WifiOff, Loader2 } from "lucide-react";
+import { Settings2, RefreshCw, Wifi, WifiOff, Loader2, History, ChevronDown } from "lucide-react";
 import { motion } from "framer-motion";
+import { useState } from "react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface AppHeaderProps {
   onSettingsClick: () => void;
+  onHistoryClick: () => void;
 }
 
-export default function AppHeader({ onSettingsClick }: AppHeaderProps) {
+export default function AppHeader({ onSettingsClick, onHistoryClick }: AppHeaderProps) {
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
   const { connectionStatus } = useOCSync();
@@ -73,13 +81,29 @@ export default function AppHeader({ onSettingsClick }: AppHeaderProps) {
           <span className="hidden md:inline text-white/50 text-[11px] font-mono">
             Powered by Egixia
           </span>
-          <button
-            onClick={onSettingsClick}
-            className="p-2 rounded-lg hover:bg-white/15 transition-colors text-white/80 hover:text-white"
-            title="Configuración API"
-          >
-            <Settings2 className="w-4 h-4" />
-          </button>
+          
+          {/* Dropdown menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="p-2 rounded-lg hover:bg-white/15 transition-colors text-white/80 hover:text-white flex items-center gap-1"
+                title="Menú"
+              >
+                <Settings2 className="w-4 h-4" />
+                <ChevronDown className="w-3 h-3" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onClick={onSettingsClick} className="cursor-pointer">
+                <Settings2 className="w-4 h-4 mr-2" />
+                Configuración API
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onHistoryClick} className="cursor-pointer">
+                <History className="w-4 h-4 mr-2" />
+                Historial de Verificaciones
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </motion.header>

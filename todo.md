@@ -40,3 +40,6 @@
 - [x] Al sincronizar pasa al step final Exportar con grid actualizado sin opción de re-sincronizar
 - [x] Botón "Sincronizar X de Y" en step Resultados pasa directamente al step Sincronizar y ejecuta integración automáticamente sin botones adicionales
 - [x] BUG: Proveedor 1204860 se marca como "no existe" - corregido: aplicado trim() a todos los códigos antes de enviar a API
+- [ ] Aplicar trim() a códigos de proveedor que vienen de la respuesta de la API (no solo al enviar)
+- [x] Agregar vista de historial de verificaciones en el menú de configuración (desplegable en header con Settings + History)
+- [x] BUG CRÍTICO: Proveedor 1204860 existe pero se marca como "Proveedor no existe" - debe ir a "No encontradas" si OC no existe pero proveedor SÍ (corregido en checkpoint anterior)
