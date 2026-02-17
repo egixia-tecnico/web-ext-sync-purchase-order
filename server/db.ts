@@ -1,6 +1,6 @@
 import { eq, desc, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, apiConfigs, InsertApiConfig, verificationLogs, clients, InsertClient, Client } from "../drizzle/schema";
+import { InsertUser, users, apiConfigs, InsertApiConfig, verificationLogs, clients, InsertClient, Client, magicLinks, InsertMagicLink } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -243,4 +243,30 @@ export async function setActiveClient(id: number) {
   
   // Activate the selected client
   await db.update(clients).set({ isActive: true }).where(eq(clients.id, id));
+}
+
+// ==================== Magic Links ====================
+
+export async function createMagicLink(data: InsertMagicLink) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.insert(magicLinks).values(data);
+  return true;
+}
+
+export async function getMagicLinkByToken(token: string) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db.select().from(magicLinks).where(eq(magicLinks.token, token)).limit(1);
+  return result[0] || null;
+}
+
+export async function markMagicLinkAsUsed(token: string) {
+  const db = await getDb();
+  if (!db) return false;
+
+  await db.update(magicLinks).set({ used: true }).where(eq(magicLinks.token, token));
+  return true;
 }

@@ -2,7 +2,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { getDefaultApiConfig, upsertApiConfig, saveVerificationLog, getVerificationHistory, getClients, getClientById, getClientByKey, getActiveClient, createClient, updateClient, deleteClient, setActiveClient } from "./db";
+import { getDefaultApiConfig, upsertApiConfig, saveVerificationLog, getVerificationHistory, getClients, getClientById, getClientByKey, getActiveClient, createClient, updateClient, deleteClient, setActiveClient, createMagicLink, getMagicLinkByToken, markMagicLinkAsUsed } from "./db";
 import { encrypt, decrypt, maskValue } from "./encryption";
 import axios from "axios";
 import { AXIOS_TIMEOUT_MS } from "@shared/const";
@@ -169,6 +169,91 @@ export const appRouter = router({
     logout: publicProcedure.mutation(async ({ ctx }) => {
       ctx.res.setHeader("Set-Cookie", `session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
       return { success: true };
+    }),
+    
+    sendMagicLink: publicProcedure
+      .input(z.object({ email: z.string().email() }))
+      .mutation(async ({ input }) => {
+        const { email } = input;
+        
+        // Validate @egixia.com domain
+        if (!email.endsWith("@egixia.com")) {
+          throw new Error("Solo se permiten correos @egixia.com");
+        }
+        
+        // Generate random token
+        const token = Array.from({ length: 32 }, () => Math.random().toString(36)[2]).join("");
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+        
+        // Save magic link to database
+        await createMagicLink({
+          email,
+          token,
+          expiresAt,
+          used: false,
+        });
+        
+        // TODO: Send email with magic link using Manus notification service
+        // For now, return the token for testing
+        console.log(`Magic link token for ${email}: ${token}`);
+        
+        return { success: true, message: "Link mágico enviado a tu correo" };
+      }),
+    
+    validateMagicLink: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const { token } = input;
+        
+        // Get magic link from database
+        const magicLink = await getMagicLinkByToken(token);
+        
+        if (!magicLink) {
+          throw new Error("Link inválido o expirado");
+        }
+        
+        // Check if already used
+        if (magicLink.used) {
+          throw new Error("Este link ya fue utilizado");
+        }
+        
+        // Check if expired
+        if (new Date() > magicLink.expiresAt) {
+          throw new Error("Este link ha expirado");
+        }
+        
+        // Mark as used
+        await markMagicLinkAsUsed(token);
+        
+        // Create admin session (set cookie with email)
+        const sessionData = JSON.stringify({ email: magicLink.email, isAdmin: true });
+        ctx.res.setHeader(
+          "Set-Cookie",
+          `admin_session=${sessionData}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`
+        );
+        
+        return { success: true, email: magicLink.email };
+      }),
+    
+    checkAdminSession: publicProcedure.query(({ ctx }) => {
+      // Read admin_session cookie from request
+      const cookies = ctx.req.headers.cookie || "";
+      const adminSessionMatch = cookies.match(/admin_session=([^;]+)/);
+      
+      if (!adminSessionMatch) {
+        return { isAdmin: false, email: null };
+      }
+      
+      try {
+        const sessionData = JSON.parse(adminSessionMatch[1]);
+        if (sessionData.isAdmin && sessionData.email && sessionData.email.endsWith("@egixia.com")) {
+          return { isAdmin: true, email: sessionData.email };
+        }
+      } catch (e) {
+        // Invalid session data
+      }
+      
+      return { isAdmin: false, email: null };
     }),
   }),
 

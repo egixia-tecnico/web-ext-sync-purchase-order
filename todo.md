@@ -105,3 +105,20 @@
 - [x] Implementar búsqueda case-insensitive en getClientByKey (db.ts) usando LOWER()
 - [x] Actualizar README_USAGE.md con ejemplos de clientKey encriptados y nota sobre case-insensitive
 - [x] Pantalla de error muestra el clientKey recibido y explica que solo mayúsculas/minúsculas son ignoradas
+
+## Autenticación con Magic Link para Administradores Egixia
+- [x] Crear tabla `magic_links` en drizzle/schema.ts con campos: id, email, token, expiresAt, used, createdAt
+- [x] Ejecutar migración de base de datos con pnpm db:push
+- [x] Crear helpers en server/db.ts: createMagicLink, getMagicLinkByToken, markMagicLinkAsUsed
+- [x] Crear endpoint tRPC `auth.sendMagicLink` que valide correo @egixia.com y genere token
+- [x] Crear endpoint tRPC `auth.validateMagicLink` que verifique token y cree sesión de administrador (cookie admin_session)
+- [x] Crear endpoint tRPC `auth.checkAdminSession` para verificar sesión desde frontend
+- [x] Crear página AdminLogin.tsx con formulario de correo y botón "Enviar Link Mágico"
+- [x] Crear página MagicLinkCallback.tsx que reciba el token de la URL y valide la sesión
+- [x] Agregar botón "Acceso Administrador @egixia.com" en ClientKeyRequired.tsx que redirija a /admin/login
+- [x] Agregar botón "Acceso Administrador @egixia.com" en ClientKeyInvalid.tsx que redirija a /admin/login
+- [x] Proteger ruta /clients para requerir autenticación @egixia.com (redirect a /admin/login si no autenticado)
+- [x] Agregar rutas /admin/login y /admin/callback en App.tsx
+- [x] Agregar tests para endpoints de magic link (sendMagicLink, validateMagicLink, checkAdminSession) - 9 tests pasando
+- [x] Total de 21 tests pasando (auth, clients, magicLink, routers, testConnection)
+- [ ] Implementar envío de correo con link mágico (usar servicio de notificaciones de Manus) - actualmente el token se imprime en consola para testing

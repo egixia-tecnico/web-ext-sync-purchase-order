@@ -2,7 +2,8 @@
  * ClientKeyRequired - Pantalla de error cuando no se proporciona clientKey
  * Bloquea el acceso a la aplicación hasta que se proporcione un clientKey válido
  */
-import { AlertCircle, Key, ExternalLink } from "lucide-react";
+import { AlertCircle, Key, ExternalLink, Shield } from "lucide-react";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
@@ -89,6 +90,16 @@ export default function ClientKeyRequired() {
             >
               Reintentar
             </Button>
+          </div>
+          
+          {/* Admin Access */}
+          <div className="w-full border-t border-slate-200 pt-6">
+            <Link href="/admin/login">
+              <Button variant="ghost" className="w-full" size="sm">
+                <Shield className="w-4 h-4 mr-2" />
+                Acceso Administrador @egixia.com
+              </Button>
+            </Link>
           </div>
 
           {/* Footer note */}

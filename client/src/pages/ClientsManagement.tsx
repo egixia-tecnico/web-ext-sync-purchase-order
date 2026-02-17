@@ -3,7 +3,8 @@
  * Permite crear, editar, eliminar y activar clientes
  * Los datos sensibles se muestran enmascarados en la lista
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Plus, Edit, Trash2, Check, Loader2 } from "lucide-react";
@@ -29,11 +30,38 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export default function ClientsManagement() {
+  const [, setLocation] = useLocation();
   const [showDialog, setShowDialog] = useState(false);
   const [editingClientId, setEditingClientId] = useState<number | null>(null);
   const [deletingClientId, setDeletingClientId] = useState<number | null>(null);
 
+  // Check admin session
+  const { data: adminSession, isLoading: sessionLoading } = trpc.auth.checkAdminSession.useQuery();
   const { data: clients, isLoading, refetch } = trpc.clients.list.useQuery();
+  
+  useEffect(() => {
+    if (!sessionLoading && adminSession && !adminSession.isAdmin) {
+      toast.error("Acceso denegado", {
+        description: "Debe autenticarse como administrador @egixia.com",
+      });
+      setLocation("/admin/login");
+    }
+  }, [adminSession, sessionLoading, setLocation]);
+  
+  // Show loading while checking session
+  if (sessionLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+  
+  // Don't render if not admin (will redirect)
+  if (!adminSession?.isAdmin) {
+    return null;
+  }
+  
   const setActiveMutation = trpc.clients.setActive.useMutation();
   const deleteMutation = trpc.clients.delete.useMutation();
 

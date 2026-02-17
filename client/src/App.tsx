@@ -8,12 +8,16 @@ import { ThemeColorProvider } from "./contexts/ThemeColorContext";
 import { OCSyncProvider } from "./contexts/OCSyncContext";
 import Home from "./pages/Home";
 import ClientsManagement from "./pages/ClientsManagement";
+import AdminLogin from "./pages/AdminLogin";
+import MagicLinkCallback from "./pages/MagicLinkCallback";
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
       <Route path={"/"} component={Home} />
       <Route path={"/clients"} component={ClientsManagement} />
+      <Route path={"/admin/login"} component={AdminLogin} />
+      <Route path={"/admin/callback"} component={MagicLinkCallback} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>

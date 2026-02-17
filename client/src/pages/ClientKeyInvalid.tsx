@@ -2,7 +2,8 @@
  * ClientKeyInvalid - Pantalla de error cuando el clientKey no coincide con ningún cliente
  * Muestra mensaje específico indicando que el valor no coincide con la parametrización
  */
-import { AlertTriangle, Key, RefreshCw } from "lucide-react";
+import { AlertTriangle, Key, RefreshCw, Shield } from "lucide-react";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
@@ -79,6 +80,16 @@ export default function ClientKeyInvalid({ clientKey }: ClientKeyInvalidProps) {
             >
               Solicitar Soporte
             </Button>
+          </div>
+          
+          {/* Admin Access */}
+          <div className="w-full border-t border-slate-200 pt-6">
+            <Link href="/admin/login">
+              <Button variant="ghost" className="w-full" size="sm">
+                <Shield className="w-4 h-4 mr-2" />
+                Acceso Administrador @egixia.com
+              </Button>
+            </Link>
           </div>
 
           {/* Footer note */}
