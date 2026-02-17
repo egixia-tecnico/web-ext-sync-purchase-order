@@ -1,4 +1,4 @@
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, apiConfigs, InsertApiConfig, verificationLogs, clients, InsertClient, Client } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -185,7 +185,12 @@ export async function getClientByKey(clientKey: string) {
   const db = await getDb();
   if (!db) return null;
 
-  const result = await db.select().from(clients).where(eq(clients.clientKey, clientKey)).limit(1);
+  // Case-insensitive search using LOWER()
+  const result = await db
+    .select()
+    .from(clients)
+    .where(sql`LOWER(${clients.clientKey}) = LOWER(${clientKey})`)
+    .limit(1);
   return result[0] || null;
 }
 

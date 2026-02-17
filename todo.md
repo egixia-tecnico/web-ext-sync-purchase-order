@@ -96,3 +96,12 @@
 - [x] Mostrar toast de éxito/error según resultado de la prueba
 - [x] Botón cambia a "Conexión OK" con borde verde cuando la prueba es exitosa
 - [x] Estado de conexión se resetea cuando se modifican las credenciales
+
+## Mejoras en Validación de ClientKey
+- [x] Actualizar ejemplos en ClientKeyRequired.tsx para usar valores hash-like (ej: a4559cf615a14a20acbd8d6eef9d315e) en lugar de nombres de empresas
+- [x] Crear componente ClientKeyInvalid.tsx para mostrar error cuando clientKey no existe
+- [x] Modificar Home.tsx para validar si el clientKey existe en la base de datos y mostrar ClientKeyInvalid
+- [x] Mostrar mensaje específico "El valor ingresado no coincide con la parametrización" cuando clientKey no existe
+- [x] Implementar búsqueda case-insensitive en getClientByKey (db.ts) usando LOWER()
+- [x] Actualizar README_USAGE.md con ejemplos de clientKey encriptados y nota sobre case-insensitive
+- [x] Pantalla de error muestra el clientKey recibido y explica que solo mayúsculas/minúsculas son ignoradas

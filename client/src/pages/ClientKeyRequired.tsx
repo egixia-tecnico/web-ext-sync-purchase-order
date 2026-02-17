@@ -54,19 +54,19 @@ export default function ClientKeyRequired() {
                 <li className="flex items-start gap-2">
                   <span className="text-emerald-600 mt-0.5">•</span>
                   <code className="bg-white px-2 py-1 rounded border text-xs break-all">
-                    {currentUrl}?clientKey=manuelita
+                    {currentUrl}?clientKey=a4559cf615a14a20acbd8d6eef9d315e
                   </code>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-emerald-600 mt-0.5">•</span>
                   <code className="bg-white px-2 py-1 rounded border text-xs break-all">
-                    {currentUrl}?clientKey=palmar
+                    {currentUrl}?clientKey=7b3e8f2c9d1a6e4f5c8b2a9d7e3f1c6a
                   </code>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-emerald-600 mt-0.5">•</span>
                   <code className="bg-white px-2 py-1 rounded border text-xs break-all">
-                    {currentUrl}?clientKey=farmatodo
+                    {currentUrl}?clientKey=9f2e1d8c7b6a5e4f3c2d1a9b8e7f6c5a
                   </code>
                 </li>
               </ul>

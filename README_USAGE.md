@@ -19,14 +19,20 @@ https://[dominio]/?clientKey=su_identificador
 ### Ejemplos de URLs válidas:
 
 ```
-https://app.manus.space/?clientKey=manuelita
-https://app.manus.space/?clientKey=palmar
-https://app.manus.space/?clientKey=farmatodo
+https://app.manus.space/?clientKey=a4559cf615a14a20acbd8d6eef9d315e
+https://app.manus.space/?clientKey=7b3e8f2c9d1a6e4f5c8b2a9d7e3f1c6a
+https://app.manus.space/?clientKey=9f2e1d8c7b6a5e4f3c2d1a9b8e7f6c5a
 ```
+
+**Nota**: El `clientKey` no distingue entre mayúsculas y minúsculas. Por ejemplo, `ABC123` es equivalente a `abc123`.
 
 ### ¿Qué pasa si no proporciono el clientKey?
 
 Si intenta acceder a la aplicación sin el parámetro `clientKey` en la URL, verá una pantalla de error que bloquea el acceso y le solicita agregar el identificador correcto.
+
+### ¿Qué pasa si el clientKey no existe?
+
+Si proporciona un `clientKey` que no está registrado en el sistema, verá un mensaje específico: **"El valor ingresado no coincide con la parametrización"**. En este caso, verifique que el `clientKey` sea correcto o contacte al administrador para obtener el identificador válido.
 
 ## Configuración de Clientes
 
@@ -41,7 +47,7 @@ Si intenta acceder a la aplicación sin el parámetro `clientKey` en la URL, ver
 1. En la pantalla de Gestión de Clientes, haga clic en **"Nuevo Cliente"**
 2. Complete el formulario con los siguientes datos:
 
-   - **Client Key** (obligatorio): Identificador único alfanumérico (ej: `manuelita`, `palmar_ve`)
+   - **Client Key** (obligatorio): Identificador único alfanumérico (ej: `a4559cf615a14a20acbd8d6eef9d315e`, `7b3e8f2c9d1a6e4f5c8b2a9d7e3f1c6a`). No distingue mayúsculas/minúsculas.
    - **Nombre** (obligatorio): Nombre descriptivo del cliente (ej: "Manuelita Colombia")
    - **Dominio Base** (obligatorio): URL del servicio API (ej: `https://egixia.net/ProveedoresManuelita/`)
    - **Usuario** (obligatorio): Usuario para autenticación
