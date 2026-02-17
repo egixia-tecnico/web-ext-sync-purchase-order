@@ -81,3 +81,18 @@
 - [x] Agregar campo syncRules en ClientDialog (textarea) para crear/editar reglas
 - [x] Mostrar reglas de sincronización en useOCVerification cuando haya OCs no sincronizadas (toast informativo)
 - [x] El endpoint verifyPurchaseOrders devuelve clientInfo con syncRules
+
+## Validación Obligatoria de ClientKey
+- [x] Crear componente ClientKeyRequired.tsx que muestre error si no hay clientKey
+- [x] Modificar Home.tsx para verificar clientKey y mostrar ClientKeyRequired si no existe
+- [x] Bloquear acceso a verificación/sincronización si no hay clientKey válido
+- [x] Agregar documentación en README_USAGE.md sobre formato de URL requerido
+- [x] Ejemplos de URL: `https://app.manus.space?clientKey=manuelita`, `?clientKey=palmar`, `?clientKey=farmatodo`
+
+## Botón de Prueba de Conexión en ClientDialog
+- [x] Agregar botón "Probar Conexión" en ClientDialog antes de guardar
+- [x] Crear endpoint tRPC `clients.testConnection` que reciba credenciales temporales
+- [x] El endpoint consume getToken con las credenciales proporcionadas y valida respuesta
+- [x] Mostrar toast de éxito/error según resultado de la prueba
+- [x] Botón cambia a "Conexión OK" con borde verde cuando la prueba es exitosa
+- [x] Estado de conexión se resetea cuando se modifican las credenciales

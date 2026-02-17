@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getDefaultApiConfig, upsertApiConfig, saveVerificationLog, getVerificationHistory, getClients, getClientById, getClientByKey, getActiveClient, createClient, updateClient, deleteClient, setActiveClient } from "./db";
 import { encrypt, decrypt, maskValue } from "./encryption";
 import axios from "axios";
+import { AXIOS_TIMEOUT_MS } from "@shared/const";
 
 // ===== Token management (server-side) =====
 let cachedToken: string | null = null;
@@ -464,6 +465,51 @@ export const appRouter = router({
           syncRules: client.syncRules,
           isActive: client.isActive,
         };
+      }),
+
+    testConnection: publicProcedure
+      .input(z.object({
+        baseUrl: z.string().url(),
+        userName: z.string().min(1),
+        password: z.string().min(1),
+        clientId: z.string().min(1),
+        clientSecret: z.string().min(1),
+      }))
+      .mutation(async ({ input }) => {
+        try {
+          const tokenUrl = `${input.baseUrl.replace(/\/$/, "")}/gettoken`;
+          const response = await axios.post(
+            tokenUrl,
+            {
+              user: input.userName,
+              password: input.password,
+              clientId: input.clientId,
+              clientSecret: input.clientSecret,
+            },
+            {
+              headers: { "Content-Type": "application/json" },
+              timeout: AXIOS_TIMEOUT_MS,
+            }
+          );
+
+          if (response.data?.access_token) {
+            return {
+              success: true,
+              message: "Conexión exitosa. Credenciales válidas.",
+            };
+          } else {
+            return {
+              success: false,
+              message: "Respuesta inválida del servidor. No se recibió token de acceso.",
+            };
+          }
+        } catch (error: any) {
+          console.error("[Clients testConnection] Error:", error.message);
+          return {
+            success: false,
+            message: error.response?.data?.message || error.message || "Error al conectar con el servidor",
+          };
+        }
       }),
   }),
 });

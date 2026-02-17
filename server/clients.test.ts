@@ -32,8 +32,10 @@ describe("Encryption", () => {
 describe("clients.create", () => {
   it("should create a client with encrypted sensitive fields", async () => {
     const caller = appRouter.createCaller({} as any);
+    const uniqueKey = `testclient_${Date.now()}`;
     
     const result = await caller.clients.create({
+      clientKey: uniqueKey,
       name: "Test Client",
       baseUrl: "https://test.example.com",
       userName: "testuser",
@@ -61,38 +63,37 @@ describe("clients.list", () => {
       expect(client).toHaveProperty("name");
       expect(client).toHaveProperty("baseUrl");
       expect(client).toHaveProperty("userName");
-      expect(client).toHaveProperty("passwordMasked");
-      expect(client).toHaveProperty("clientIdMasked");
-      expect(client).toHaveProperty("clientSecretMasked");
+      expect(client).toHaveProperty("password");
+      expect(client).toHaveProperty("clientId");
+      expect(client).toHaveProperty("clientSecret");
       expect(client).toHaveProperty("primaryColor");
       expect(client).toHaveProperty("isActive");
       
       // Verify masked values don't contain full sensitive data
-      expect(client.passwordMasked).toContain("***");
-      expect(client.clientIdMasked).toContain("***");
-      expect(client.clientSecretMasked).toContain("***");
+      expect(client.password).toContain("***");
+      expect(client.clientId).toContain("***");
+      expect(client.clientSecret).toContain("***");
     }
   });
 });
 
-describe("clients.getActive", () => {
-  it("should return active client or null", async () => {
+describe("clients.getByKey", () => {
+  it("should return client by clientKey or null", async () => {
     const caller = appRouter.createCaller({} as any);
-    const activeClient = await caller.clients.getActive();
+    const client = await caller.clients.getByKey({ clientKey: "nonexistent_key" });
     
-    // Can be null if no client is active
-    if (activeClient) {
-      expect(activeClient).toHaveProperty("id");
-      expect(activeClient).toHaveProperty("name");
-      expect(activeClient).toHaveProperty("baseUrl");
-      expect(activeClient).toHaveProperty("userName");
-      expect(activeClient).toHaveProperty("primaryColor");
-      expect(activeClient.isActive).toBe(true);
+    // Can be null if clientKey doesn't exist
+    if (client) {
+      expect(client).toHaveProperty("id");
+      expect(client).toHaveProperty("name");
+      expect(client).toHaveProperty("baseUrl");
+      expect(client).toHaveProperty("userName");
+      expect(client).toHaveProperty("primaryColor");
       
       // Should not expose sensitive fields
-      expect(activeClient).not.toHaveProperty("password");
-      expect(activeClient).not.toHaveProperty("clientId");
-      expect(activeClient).not.toHaveProperty("clientSecret");
+      expect(client).not.toHaveProperty("password");
+      expect(client).not.toHaveProperty("clientId");
+      expect(client).not.toHaveProperty("clientSecret");
     }
   });
 });

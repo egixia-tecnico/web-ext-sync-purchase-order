@@ -13,21 +13,21 @@ describe("egixia.getVerificationHistory", () => {
       const log = history[0];
       expect(log).toHaveProperty("id");
       expect(log).toHaveProperty("totalRecords");
-      expect(log).toHaveProperty("syncedCount");
-      expect(log).toHaveProperty("notFoundCount");
-      expect(log).toHaveProperty("supplierNotExistsCount");
-      expect(log).toHaveProperty("errorCount");
-      expect(log).toHaveProperty("durationMs");
-      expect(log).toHaveProperty("executedAt");
+      expect(log).toHaveProperty("synced");
+      expect(log).toHaveProperty("notFound");
+      expect(log).toHaveProperty("supplierNotExists");
+      expect(log).toHaveProperty("errors");
+      expect(log).toHaveProperty("executionTimeMs");
+      expect(log).toHaveProperty("createdAt");
       
       expect(typeof log.id).toBe("number");
       expect(typeof log.totalRecords).toBe("number");
-      expect(typeof log.syncedCount).toBe("number");
-      expect(typeof log.notFoundCount).toBe("number");
-      expect(typeof log.supplierNotExistsCount).toBe("number");
-      expect(typeof log.errorCount).toBe("number");
-      expect(typeof log.durationMs).toBe("number");
-      expect(log.executedAt).toBeInstanceOf(Date);
+      expect(typeof log.synced).toBe("number");
+      expect(typeof log.notFound).toBe("number");
+      expect(typeof log.supplierNotExists).toBe("number");
+      expect(typeof log.errors).toBe("number");
+      expect(typeof log.executionTimeMs).toBe("number");
+      expect(log.createdAt).toBeInstanceOf(Date);
     }
   });
 });

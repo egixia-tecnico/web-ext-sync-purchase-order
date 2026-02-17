@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2 } from "lucide-react";
+import { Loader2, Wifi } from "lucide-react";
 import { toast } from "sonner";
 
 interface ClientDialogProps {
@@ -38,6 +38,10 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
 
   const createMutation = trpc.clients.create.useMutation();
   const updateMutation = trpc.clients.update.useMutation();
+  const testConnectionMutation = trpc.clients.testConnection.useMutation();
+
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionTested, setConnectionTested] = useState(false);
 
   useEffect(() => {
     if (existingClient) {
@@ -89,6 +93,41 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
 
   const handleChange = (field: string, value: string | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    // Reset connection test when credentials change
+    if (["baseUrl", "userName", "password", "clientId", "clientSecret"].includes(field)) {
+      setConnectionTested(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    if (!formData.baseUrl || !formData.userName || !formData.password || !formData.clientId || !formData.clientSecret) {
+      toast.error("Complete todos los campos de conexión antes de probar", { position: "top-center" });
+      return;
+    }
+
+    setTestingConnection(true);
+    try {
+      const result = await testConnectionMutation.mutateAsync({
+        baseUrl: formData.baseUrl,
+        userName: formData.userName,
+        password: formData.password,
+        clientId: formData.clientId,
+        clientSecret: formData.clientSecret,
+      });
+
+      if (result.success) {
+        toast.success(result.message, { position: "top-center" });
+        setConnectionTested(true);
+      } else {
+        toast.error(result.message, { position: "top-center" });
+        setConnectionTested(false);
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Error al probar conexión", { position: "top-center" });
+      setConnectionTested(false);
+    } finally {
+      setTestingConnection(false);
+    }
   };
 
   return (
@@ -242,19 +281,36 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => onClose(false)}>
-                Cancelar
-              </Button>
+            <div className="flex justify-between items-center gap-2 pt-4 border-t">
               <Button
-                type="submit"
-                disabled={createMutation.isPending || updateMutation.isPending}
+                type="button"
+                variant="outline"
+                onClick={handleTestConnection}
+                disabled={testingConnection || !formData.baseUrl || !formData.userName || !formData.password || !formData.clientId || !formData.clientSecret}
+                className={connectionTested ? "border-green-500 text-green-700" : ""}
               >
-                {(createMutation.isPending || updateMutation.isPending) && (
+                {testingConnection ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Wifi className="w-4 h-4 mr-2" />
                 )}
-                {clientId ? "Actualizar" : "Crear"}
+                {connectionTested ? "Conexión OK" : "Probar Conexión"}
               </Button>
+
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => onClose(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                >
+                  {(createMutation.isPending || updateMutation.isPending) && (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  )}
+                  {clientId ? "Actualizar" : "Crear"}
+                </Button>
+              </div>
             </div>
           </form>
         )}

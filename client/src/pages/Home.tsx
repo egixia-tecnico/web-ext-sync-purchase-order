@@ -23,10 +23,12 @@ import { useThemeColor } from "@/contexts/ThemeColorContext";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Zap, Database, BarChart3, ArrowRight, AlertCircle, RefreshCw } from "lucide-react";
+import { useClientKey } from "@/contexts/ClientKeyContext";
+import ClientKeyRequired from "@/pages/ClientKeyRequired";
 
 export default function Home() {
   let { user, loading, error, isAuthenticated, logout } = useAuth();
-
+  const { clientKey } = useClientKey();
 
   const [showHistory, setShowHistory] = useState(false);
   const { records, connectionStatus, connectionError, setConnectionStatus, setConnectionError, currentStep } = useOCSync();
@@ -36,6 +38,11 @@ export default function Home() {
   // Auto-connect removed - connection is now handled by clientKey system
 
   // Reconnect function removed - handled by clientKey system
+
+  // Validar que exista clientKey
+  if (!clientKey) {
+    return <ClientKeyRequired />;
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
