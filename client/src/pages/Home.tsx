@@ -11,7 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { motion } from "framer-motion";
 import AppHeader from "@/components/AppHeader";
-import ApiConfigDialog from "@/components/ApiConfigDialog";
+
 import HistoryDialog from "@/components/HistoryDialog";
 import WorkflowStepper from "@/components/WorkflowStepper";
 import DataUploader from "@/components/DataUploader";
@@ -27,66 +27,19 @@ import { Zap, Database, BarChart3, ArrowRight, AlertCircle, RefreshCw } from "lu
 export default function Home() {
   let { user, loading, error, isAuthenticated, logout } = useAuth();
 
-  const [showApiConfig, setShowApiConfig] = useState(false);
+
   const [showHistory, setShowHistory] = useState(false);
   const { records, connectionStatus, connectionError, setConnectionStatus, setConnectionError, currentStep } = useOCSync();
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
 
-  // Auto-connect on mount
-  const testConnectionMutation = trpc.egixia.testConnection.useMutation();
-  const hasAutoConnected = useRef(false);
+  // Auto-connect removed - connection is now handled by clientKey system
 
-  useEffect(() => {
-    if (hasAutoConnected.current) return;
-    hasAutoConnected.current = true;
-
-    const autoConnect = async () => {
-      setConnectionStatus("connecting");
-      try {
-        const result = await testConnectionMutation.mutateAsync({});
-        if (result.success) {
-          setConnectionStatus("connected");
-          toast.success("Conexión establecida con la API de Egixia", { position: "top-center" });
-        } else {
-          setConnectionStatus("error");
-          setConnectionError(result.message || "No se pudo conectar");
-          toast.error(result.message || "Error al conectar con la API", { position: "top-center" });
-        }
-      } catch (err: any) {
-        setConnectionStatus("error");
-        setConnectionError(err?.message || "Error de conexión");
-        toast.error("Error al conectar con la API de Egixia", { position: "top-center" });
-      }
-    };
-
-    const timer = setTimeout(autoConnect, 500);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const reconnect = async () => {
-    setConnectionStatus("connecting");
-    setConnectionError(null);
-    try {
-      const result = await testConnectionMutation.mutateAsync({});
-      if (result.success) {
-        setConnectionStatus("connected");
-        toast.success("Conexión restablecida", { position: "top-center" });
-      } else {
-        setConnectionStatus("error");
-        setConnectionError(result.message || "No se pudo conectar");
-        toast.error(result.message || "Error al reconectar", { position: "top-center" });
-      }
-    } catch (err: any) {
-      setConnectionStatus("error");
-      setConnectionError(err?.message || "Error de conexión");
-    }
-  };
+  // Reconnect function removed - handled by clientKey system
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <AppHeader onSettingsClick={() => setShowApiConfig(true)} onHistoryClick={() => setShowHistory(true)} />
-      <ApiConfigDialog open={showApiConfig} onOpenChange={setShowApiConfig} />
+      <AppHeader onHistoryClick={() => setShowHistory(true)} />
       <HistoryDialog open={showHistory} onOpenChange={setShowHistory} />
 
       <main className="flex-1">
@@ -180,38 +133,7 @@ export default function Home() {
           </motion.section>
         )}
 
-        {/* Connection error banner - only in step 1 */}
-        {connectionStatus === "error" && connectionError && currentStep === 1 && (
-          <div className="container mt-4">
-            <motion.div
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="p-3 rounded-lg bg-red-50 border border-red-200 flex items-center gap-3"
-            >
-              <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center shrink-0">
-                <AlertCircle className="w-4 h-4 text-red-600" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-red-800">Error de conexión</p>
-                <p className="text-xs text-red-600">{connectionError}</p>
-              </div>
-              <button
-                onClick={reconnect}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-white hover:opacity-90 transition-opacity shrink-0 flex items-center gap-1.5"
-                style={{ backgroundColor: `rgb(${r}, ${g}, ${b})` }}
-              >
-                <RefreshCw className="w-3 h-3" />
-                Reintentar
-              </button>
-              <button
-                onClick={() => setShowApiConfig(true)}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium border border-red-300 text-red-700 hover:bg-red-100 transition-colors shrink-0"
-              >
-                Configurar
-              </button>
-            </motion.div>
-          </div>
-        )}
+        {/* Connection error banner removed - handled by clientKey system */}
 
         {/* Main content */}
         <div className="container py-5 space-y-4">

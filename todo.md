@@ -57,3 +57,27 @@
 - [x] Actualizar tests para reflejar el nuevo sistema de clientes (18 tests pasando)
 - [x] ThemeColorContext carga automáticamente el color del cliente activo (prioridad: URL param > cliente activo > default)
 - [x] Validación: si no hay cliente activo ni api_configs, mostrar mensaje solicitando configuración
+
+## Sistema de Identificación por ClientKey en URL
+- [x] Agregar campo `clientKey` (varchar único) a la tabla `clients` en drizzle/schema.ts
+- [x] Ejecutar migración de base de datos con pnpm db:push
+- [x] Crear endpoint tRPC `clients.getByKey` para buscar cliente por clientKey
+- [x] Crear contexto React `ClientKeyContext` para almacenar clientKey de la sesión
+- [x] Leer parámetro `?clientKey=XXX` de la URL al cargar la aplicación
+- [x] Persistir clientKey en sessionStorage para mantenerlo durante la navegación
+- [x] Modificar `getActiveClientCredentials()` para aceptar clientKey como parámetro opcional y priorizar: clientKey pasado > cliente isActive > api_configs legacy
+- [x] Agregar campo clientKey en ClientDialog (formulario de crear/editar cliente)
+- [x] Mostrar clientKey en la tabla de ClientsManagement
+- [x] Agregar validación: clientKey debe ser único y alfanumérico (sin espacios ni caracteres especiales)
+- [x] Actualizar useOCVerification para pasar clientKey en cada llamada tRPC
+- [x] Actualizar ThemeColorContext para usar clientKey en lugar de cliente activo
+- [x] Eliminar ApiConfigDialog y referencias obsoletas (ahora se usa sistema de clientes)
+- [x] Formato de URL: `https://app.manus.space?clientKey=manuelita`
+
+## Campo de Reglas de Sincronización
+- [x] Agregar campo `syncRules` (text nullable) a la tabla `clients` en drizzle/schema.ts
+- [x] Ejecutar migración de base de datos con pnpm db:push
+- [x] Agregar syncRules al input schema de endpoints create y update en routers.ts
+- [x] Agregar campo syncRules en ClientDialog (textarea) para crear/editar reglas
+- [x] Mostrar reglas de sincronización en useOCVerification cuando haya OCs no sincronizadas (toast informativo)
+- [x] El endpoint verifyPurchaseOrders devuelve clientInfo con syncRules

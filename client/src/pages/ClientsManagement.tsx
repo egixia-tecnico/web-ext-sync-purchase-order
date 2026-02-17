@@ -147,13 +147,13 @@ export default function ClientsManagement() {
                   <TableCell className="text-sm text-muted-foreground">{client.baseUrl}</TableCell>
                   <TableCell className="text-sm">{client.userName}</TableCell>
                   <TableCell className="text-sm font-mono text-muted-foreground">
-                    {client.passwordMasked}
+                    {client.password}
                   </TableCell>
                   <TableCell className="text-sm font-mono text-muted-foreground">
-                    {client.clientIdMasked}
+                    {client.clientId}
                   </TableCell>
                   <TableCell className="text-sm font-mono text-muted-foreground">
-                    {client.clientSecretMasked}
+                    {client.clientSecret}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">

@@ -62,6 +62,7 @@ export type VerificationLog = typeof verificationLogs.$inferSelect;
  */
 export const clients = mysqlTable("clients", {
   id: int("id").autoincrement().primaryKey(),
+  clientKey: varchar("clientKey", { length: 64 }).notNull().unique(), // unique identifier for URL-based access
   name: varchar("name", { length: 255 }).notNull(),
   baseUrl: varchar("baseUrl", { length: 512 }).notNull(),
   userName: varchar("userName", { length: 255 }).notNull(),
@@ -69,6 +70,7 @@ export const clients = mysqlTable("clients", {
   clientId: text("clientId").notNull(), // encrypted
   clientSecret: text("clientSecret").notNull(), // encrypted
   primaryColor: varchar("primaryColor", { length: 7 }).notNull().default("#10b981"), // hex color
+  syncRules: text("syncRules"), // business rules for synchronization (optional)
   isActive: boolean("isActive").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

@@ -17,11 +17,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 interface AppHeaderProps {
-  onSettingsClick: () => void;
   onHistoryClick: () => void;
 }
 
-export default function AppHeader({ onSettingsClick, onHistoryClick }: AppHeaderProps) {
+export default function AppHeader({ onHistoryClick }: AppHeaderProps) {
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
   const { connectionStatus } = useOCSync();
@@ -100,10 +99,7 @@ export default function AppHeader({ onSettingsClick, onHistoryClick }: AppHeader
                 <Users className="w-4 h-4 mr-2" />
                 Gestión de Clientes
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={onSettingsClick} className="cursor-pointer">
-                <Settings2 className="w-4 h-4 mr-2" />
-                Configuración API (Legacy)
-              </DropdownMenuItem>
+
               <DropdownMenuItem onClick={onHistoryClick} className="cursor-pointer">
                 <History className="w-4 h-4 mr-2" />
                 Historial de Verificaciones

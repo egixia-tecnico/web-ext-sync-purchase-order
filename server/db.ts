@@ -181,6 +181,14 @@ export async function getClientById(id: number) {
   return result[0] || null;
 }
 
+export async function getClientByKey(clientKey: string) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db.select().from(clients).where(eq(clients.clientKey, clientKey)).limit(1);
+  return result[0] || null;
+}
+
 export async function getActiveClient() {
   const db = await getDb();
   if (!db) return null;

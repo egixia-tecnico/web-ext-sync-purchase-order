@@ -19,6 +19,7 @@ interface ClientDialogProps {
 
 export default function ClientDialog({ open, onClose, clientId }: ClientDialogProps) {
   const [formData, setFormData] = useState({
+    clientKey: "",
     name: "",
     baseUrl: "",
     userName: "",
@@ -26,6 +27,7 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
     clientId: "",
     clientSecret: "",
     primaryColor: "#10b981",
+    syncRules: "",
     isActive: false,
   });
 
@@ -40,6 +42,7 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
   useEffect(() => {
     if (existingClient) {
       setFormData({
+        clientKey: existingClient.clientKey,
         name: existingClient.name,
         baseUrl: existingClient.baseUrl,
         userName: existingClient.userName,
@@ -47,11 +50,13 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
         clientId: existingClient.clientId,
         clientSecret: existingClient.clientSecret,
         primaryColor: existingClient.primaryColor,
+        syncRules: existingClient.syncRules || "",
         isActive: existingClient.isActive,
       });
     } else if (!clientId) {
       // Reset form for new client
       setFormData({
+        clientKey: "",
         name: "",
         baseUrl: "",
         userName: "",
@@ -59,6 +64,7 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
         clientId: "",
         clientSecret: "",
         primaryColor: "#10b981",
+        syncRules: "",
         isActive: false,
       });
     }
@@ -101,6 +107,22 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <Label htmlFor="clientKey">Llave de Cliente (Client Key) *</Label>
+                <Input
+                  id="clientKey"
+                  value={formData.clientKey}
+                  onChange={(e) => handleChange("clientKey", e.target.value)}
+                  placeholder="manuelita" 
+                  pattern="[a-zA-Z0-9_-]+"
+                  title="Solo letras, números, guiones y guiones bajos"
+                  required
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Identificador único para acceso por URL (ej: ?clientKey=manuelita)
+                </p>
+              </div>
+
               <div className="col-span-2">
                 <Label htmlFor="name">Nombre del Cliente *</Label>
                 <Input
@@ -189,6 +211,21 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
                     className="flex-1"
                   />
                 </div>
+              </div>
+
+              <div className="col-span-2">
+                <Label htmlFor="syncRules">Reglas de Sincronización (opcional)</Label>
+                <textarea
+                  id="syncRules"
+                  value={formData.syncRules}
+                  onChange={(e) => handleChange("syncRules", e.target.value)}
+                  placeholder="Ej: Solo sincronizar OCs con estado 'Aprobado'. Verificar que el proveedor tenga RUT válido."
+                  rows={3}
+                  className="w-full px-3 py-2 text-sm border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Estas reglas se mostrarán al usuario cuando haya órdenes no sincronizadas
+                </p>
               </div>
 
               <div className="flex items-center gap-2 pt-6">

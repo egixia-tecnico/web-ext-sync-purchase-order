@@ -5,13 +5,15 @@
  */
 import { useCallback } from "react";
 import { useOCSync, type OCRecord } from "@/contexts/OCSyncContext";
+import { useClientKey } from "@/contexts/ClientKeyContext";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 
 export function useOCVerification() {
   const { records, updateRecord, updateRecordsBatch, setIsProcessing, setProgress, selectedRecords } = useOCSync();
+  const { clientKey } = useClientKey();
 
-  const verifyBatchMutation = trpc.egixia.verifyBatch.useMutation();
+  const verifyBatchMutation = trpc.egixia.verifyPurchaseOrders.useMutation();
 
   const verifyBatch = useCallback(async (recordsToVerify?: OCRecord[]) => {
     // Use selected records if no specific records provided
@@ -30,23 +32,13 @@ export function useOCVerification() {
 
     try {
       const result = await verifyBatchMutation.mutateAsync({
-        records: targets.map(r => ({
-          buyerCode: r.buyer_external_code,
+        orders: targets.map(r => ({
+          purchaseOrderId: r.purchase_order_number,
           supplierCode: r.provider_external_code,
-          purchaseOrderNumber: r.purchase_order_number,
+          buyerCode: r.buyer_external_code,
         })),
+        clientKey: clientKey || undefined,
       });
-
-      if (!result.success) {
-        toast.error(result.error || "Error al verificar", { position: "top-center" });
-        const errorUpdates = targets.map(r => ({
-          id: r.id,
-          updates: { status: "error" as const, statusMessage: result.error || "Error de verificación" },
-        }));
-        updateRecordsBatch(errorUpdates);
-        setIsProcessing(false);
-        return;
-      }
 
       // Map results back to records
       const batchUpdates: Array<{ id: string; updates: Partial<OCRecord> }> = [];
@@ -66,49 +58,50 @@ export function useOCVerification() {
         batchUpdates.push({
           id: target.id,
           updates: {
-            status: apiResult.status === "synced" ? "synced"
+            status: apiResult.status === "found" ? "synced"
               : apiResult.status === "not_found" ? "not_found"
               : apiResult.status === "supplier_not_exists" ? "supplier_not_exists"
               : "error",
-            statusMessage: apiResult.statusDetail,
-            portalData: apiResult.portalData,
-            buyer_name: apiResult.portalData?.buyerName,
-            provider_name: apiResult.portalData?.providerName,
+            statusMessage: apiResult.error || (apiResult.status === "found" ? `Sincronizada (${apiResult.syncStatus})` : apiResult.status === "not_found" ? "OC no encontrada" : "Proveedor no existe"),
           },
         });
       }
 
+      // Apply all updates
       updateRecordsBatch(batchUpdates);
 
       // Show summary toast
       if (result.summary) {
         const s = result.summary;
         toast.success(
-          `Verificación completada: ${s.synced} sincronizadas, ${s.notFound} no encontradas, ${s.supplierNotExists} proveedor no existe, ${s.errors} errores. Tiempo: ${(s.executionTimeMs / 1000).toFixed(1)}s`,
+          `Verificación completada: ${s.found} sincronizadas, ${s.not_found} no encontradas, ${s.supplier_not_exists} proveedor no existe, ${s.errors} errores`,
           { position: "top-center", duration: 8000 }
+        );
+      }
+
+      // Show sync rules if available and there are unsynchronized orders
+      if (result.clientInfo?.syncRules && (result.summary.not_found > 0 || result.summary.supplier_not_exists > 0)) {
+        toast.info(
+          `Reglas de sincronización: ${result.clientInfo.syncRules}`,
+          { position: "top-center", duration: 10000 }
         );
       }
 
       setProgress({ current: targets.length, total: targets.length });
     } catch (err: any) {
       const errorMsg = err?.message || "Error desconocido";
-      
-      // Check for permission errors (403)
-      if (errorMsg.includes("No autorizado") || errorMsg.includes("Acceso denegado")) {
-        toast.error(`Error de permisos: ${errorMsg}`, { position: "top-center", duration: 10000 });
-      } else {
-        toast.error(`Error al verificar: ${errorMsg}`, { position: "top-center" });
-      }
+      toast.error(`Error en verificación: ${errorMsg}`, { position: "top-center", duration: 6000 });
 
+      // Mark all as error
       const errorUpdates = targets.map(r => ({
         id: r.id,
         updates: { status: "error" as const, statusMessage: errorMsg },
       }));
       updateRecordsBatch(errorUpdates);
+    } finally {
+      setIsProcessing(false);
     }
-
-    setIsProcessing(false);
-  }, [records, selectedRecords, updateRecord, updateRecordsBatch, setIsProcessing, setProgress, verifyBatchMutation]);
+  }, [records, selectedRecords, updateRecordsBatch, setIsProcessing, setProgress, verifyBatchMutation, clientKey]);
 
   return { verifyBatch };
 }

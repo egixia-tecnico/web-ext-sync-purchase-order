@@ -55,10 +55,10 @@ export default function HistoryDialog({ open, onOpenChange }: HistoryDialogProps
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <p className="text-sm font-medium">
-                      {format(new Date(log.executedAt), "PPP 'a las' p", { locale: es })}
+                      {format(new Date(log.createdAt), "PPP 'a las' p", { locale: es })}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Duración: {log.durationMs ? `${(log.durationMs / 1000).toFixed(2)}s` : "N/A"}
+                      Duración: {log.executionTimeMs ? `${(log.executionTimeMs / 1000).toFixed(2)}s` : "N/A"}
                     </p>
                   </div>
                   <span className="text-xs text-muted-foreground">
@@ -73,7 +73,7 @@ export default function HistoryDialog({ open, onOpenChange }: HistoryDialogProps
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Sincronizadas</p>
-                      <p className="text-sm font-semibold">{log.syncedCount}</p>
+                      <p className="text-sm font-semibold">{log.synced}</p>
                     </div>
                   </div>
 
@@ -83,7 +83,7 @@ export default function HistoryDialog({ open, onOpenChange }: HistoryDialogProps
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">No encontradas</p>
-                      <p className="text-sm font-semibold">{log.notFoundCount}</p>
+                      <p className="text-sm font-semibold">{log.notFound}</p>
                     </div>
                   </div>
 
@@ -93,7 +93,7 @@ export default function HistoryDialog({ open, onOpenChange }: HistoryDialogProps
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Proveedor no existe</p>
-                      <p className="text-sm font-semibold">{log.supplierNotExistsCount}</p>
+                      <p className="text-sm font-semibold">{log.supplierNotExists}</p>
                     </div>
                   </div>
 
@@ -103,7 +103,7 @@ export default function HistoryDialog({ open, onOpenChange }: HistoryDialogProps
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Errores</p>
-                      <p className="text-sm font-semibold">{log.errorCount}</p>
+                      <p className="text-sm font-semibold">{log.errors}</p>
                     </div>
                   </div>
                 </div>

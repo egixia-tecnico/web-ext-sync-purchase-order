@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, ReactNode, useContext, useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { useClientKey } from "@/contexts/ClientKeyContext";
 
 interface ThemeColorContextType {
   primaryColor: string;
@@ -47,8 +48,12 @@ export function ThemeColorProvider({ children }: { children: ReactNode }) {
   const [primaryColor, setPrimaryColor] = useState(DEFAULT_PRIMARY);
   const [primaryRgb, setPrimaryRgb] = useState(hexToRgb(DEFAULT_PRIMARY));
 
-  // Load active client color
-  const { data: activeClient } = trpc.clients.getActive.useQuery();
+  // Load client color from clientKey context
+  const { clientKey } = useClientKey();
+  const { data: clientByKey } = trpc.clients.getByKey.useQuery(
+    { clientKey: clientKey! },
+    { enabled: !!clientKey }
+  );
 
   useEffect(() => {
     // Priority 1: URL parameter (for embedding)
@@ -63,12 +68,12 @@ export function ThemeColorProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Priority 2: Active client color
-    if (activeClient?.primaryColor) {
-      setPrimaryColor(activeClient.primaryColor);
-      setPrimaryRgb(hexToRgb(activeClient.primaryColor));
+    // Priority 2: Client color from clientKey
+    if (clientByKey?.primaryColor) {
+      setPrimaryColor(clientByKey.primaryColor);
+      setPrimaryRgb(hexToRgb(clientByKey.primaryColor));
     }
-  }, [activeClient]);
+  }, [clientByKey]);
 
   useEffect(() => {
     const { r, g, b } = primaryRgb;

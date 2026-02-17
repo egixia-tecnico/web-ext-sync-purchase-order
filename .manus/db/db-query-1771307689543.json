@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE `clients` ADD CONSTRAINT `clients_clientKey_unique` UNIQUE(`clientKey`);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3G7vsVf2Xrg4bKL.root --database iaCkpopGnAhaAjduGswQQS --execute ALTER TABLE `clients` ADD CONSTRAINT `clients_clientKey_unique` UNIQUE(`clientKey`);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 473
+}
