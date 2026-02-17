@@ -122,3 +122,10 @@
 - [x] Agregar tests para endpoints de magic link (sendMagicLink, validateMagicLink, checkAdminSession) - 9 tests pasando
 - [x] Total de 21 tests pasando (auth, clients, magicLink, routers, testConnection)
 - [ ] Implementar envío de correo con link mágico (usar servicio de notificaciones de Manus) - actualmente el token se imprime en consola para testing
+
+## Correcciones Críticas
+- [x] BUG: Error "No hay conexión con la API" aunque cliente está parametrizado - RESUELTO: Creado cliente Manuelita en BD con clientKey a4559cf615a14a20acbd8d6eef9d315e y credenciales encriptadas
+- [x] Filtrar historial de verificaciones por clientKey del cliente actual - RESUELTO: Agregado campo clientId a verification_logs, endpoint getVerificationHistory filtra por clientKey, saveVerificationLog guarda clientId
+- [ ] Integrar servicio de notificaciones de Manus para envío real de magic links por correo - PENDIENTE: Requiere configuración de SMTP o servicio de correo externo (SendGrid/AWS SES). El servicio notifyOwner de Manus solo envía notificaciones al dueño del proyecto, no correos a direcciones arbitrarias.
+- [x] Verificar que el endpoint getToken reciba correctamente las credenciales del cliente seleccionado - RESUELTO: Agregado logging detallado en getActiveClientCredentials
+- [x] Agregar logging detallado en getActiveClientCredentials para debug - RESUELTO: Logs muestran proceso completo de búsqueda de credenciales

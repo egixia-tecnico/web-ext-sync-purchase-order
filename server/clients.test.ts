@@ -60,6 +60,7 @@ describe("clients.list", () => {
     if (clients.length > 0) {
       const client = clients[0];
       expect(client).toHaveProperty("id");
+      expect(client).toHaveProperty("clientKey");
       expect(client).toHaveProperty("name");
       expect(client).toHaveProperty("baseUrl");
       expect(client).toHaveProperty("userName");
@@ -67,7 +68,9 @@ describe("clients.list", () => {
       expect(client).toHaveProperty("clientId");
       expect(client).toHaveProperty("clientSecret");
       expect(client).toHaveProperty("primaryColor");
+      expect(client).toHaveProperty("syncRules");
       expect(client).toHaveProperty("isActive");
+      expect(client).toHaveProperty("createdAt");
       
       // Verify masked values don't contain full sensitive data
       expect(client.password).toContain("***");

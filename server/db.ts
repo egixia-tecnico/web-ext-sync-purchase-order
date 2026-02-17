@@ -137,6 +137,7 @@ export async function upsertApiConfig(config: {
 
 export async function saveVerificationLog(log: {
   userId?: number;
+  clientId?: number;
   totalRecords: number;
   synced: number;
   notFound: number;
@@ -150,15 +151,21 @@ export async function saveVerificationLog(log: {
   await db.insert(verificationLogs).values(log);
 }
 
-export async function getVerificationHistory(limit: number = 20) {
+export async function getVerificationHistory(clientId?: number, limit: number = 20) {
   const db = await getDb();
   if (!db) return [];
 
-  const logs = await db
+  let query = db
     .select()
     .from(verificationLogs)
-    .orderBy(desc(verificationLogs.createdAt))
-    .limit(limit);
+    .orderBy(desc(verificationLogs.createdAt));
+
+  // Filter by clientId if provided
+  if (clientId) {
+    query = query.where(eq(verificationLogs.clientId, clientId)) as any;
+  }
+
+  const logs = await query.limit(limit);
 
   return logs;
 }

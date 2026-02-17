@@ -45,6 +45,7 @@ export type InsertApiConfig = typeof apiConfigs.$inferInsert;
 export const verificationLogs = mysqlTable("verification_logs", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId"),
+  clientId: int("clientId"), // foreign key to clients table
   totalRecords: int("totalRecords").notNull().default(0),
   synced: int("synced").notNull().default(0),
   notFound: int("notFound").notNull().default(0),

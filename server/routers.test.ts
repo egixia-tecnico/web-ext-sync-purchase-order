@@ -4,7 +4,7 @@ import { appRouter } from "./routers";
 describe("egixia.getVerificationHistory", () => {
   it("should return verification history logs", async () => {
     const caller = appRouter.createCaller({} as any);
-    const history = await caller.egixia.getVerificationHistory();
+    const history = await caller.egixia.getVerificationHistory({});
     
     expect(Array.isArray(history)).toBe(true);
     

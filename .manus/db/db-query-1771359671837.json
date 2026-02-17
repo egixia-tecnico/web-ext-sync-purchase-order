@@ -1,0 +1,45 @@
+{
+  "query": "SELECT id, name, clientKey FROM clients;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3G7vsVf2Xrg4bKL.root --database iaCkpopGnAhaAjduGswQQS --execute SELECT id, name, clientKey FROM clients;",
+  "rows": [
+    {
+      "id": "1",
+      "name": "Test Client",
+      "clientKey": "client_1"
+    },
+    {
+      "id": "2",
+      "name": "Manuelita & Palmar",
+      "clientKey": "a4559cf615a14a20acb38b6eef9d315e"
+    },
+    {
+      "id": "60002",
+      "name": "Test Client",
+      "clientKey": "testclient_1771331082772"
+    },
+    {
+      "id": "90001",
+      "name": "Manuelita",
+      "clientKey": "a4559cf615a14a20acbd8d6eef9d315e"
+    },
+    {
+      "id": "90002",
+      "name": "Test Client",
+      "clientKey": "testclient_1771359571347"
+    },
+    {
+      "id": "90003",
+      "name": "Test Client",
+      "clientKey": "testclient_1771359642643"
+    },
+    {
+      "id": "90004",
+      "name": "Test Client",
+      "clientKey": "testclient_1771359665139"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\tclientKey\n1\tTest Client\tclient_1\n2\tManuelita & Palmar\ta4559cf615a14a20acb38b6eef9d315e\n60002\tTest Client\ttestclient_1771331082772\n90001\tManuelita\ta4559cf615a14a20acbd8d6eef9d315e\n90002\tTest Client\ttestclient_1771359571347\n90003\tTest Client\ttestclient_1771359642643\n90004\tTest Client\ttestclient_1771359665139\n",
+  "stderr": "",
+  "execution_time_ms": 54
+}

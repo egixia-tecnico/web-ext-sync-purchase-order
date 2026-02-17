@@ -26,9 +26,12 @@ async function getClientCredentials(clientKey?: string): Promise<{
   primaryColor: string;
   syncRules?: string | null;
 } | null> {
+  console.log("[getClientCredentials] Called with clientKey:", clientKey);
+  
   // Priority 1: Use clientKey if provided
   if (clientKey) {
     const client = await getClientByKey(clientKey);
+    console.log("[getClientCredentials] Client found by key:", client ? { id: client.id, name: client.name, isActive: client.isActive } : null);
     if (client) {
       // Check if client is active
       if (!client.isActive) {
@@ -49,7 +52,9 @@ async function getClientCredentials(clientKey?: string): Promise<{
   }
 
   // Priority 2: Try to get active client
+  console.log("[getClientCredentials] No clientKey provided, trying active client...");
   const activeClient = await getActiveClient();
+  console.log("[getClientCredentials] Active client:", activeClient ? { id: activeClient.id, name: activeClient.name, isActive: activeClient.isActive } : null);
   if (activeClient) {
     if (!activeClient.isActive) {
       throw new Error(`Cliente "${activeClient.name}" está suspendido. Contacte al administrador.`);
@@ -67,7 +72,9 @@ async function getClientCredentials(clientKey?: string): Promise<{
   }
 
   // Priority 3: Fallback to legacy api_configs for backward compatibility
+  console.log("[getClientCredentials] No active client, trying legacy config...");
   const legacyConfig = await getDefaultApiConfig();
+  console.log("[getClientCredentials] Legacy config:", legacyConfig ? "found" : "not found");
   if (legacyConfig) {
     return {
       baseUrl: legacyConfig.baseUrl,
@@ -81,6 +88,7 @@ async function getClientCredentials(clientKey?: string): Promise<{
     };
   }
 
+  console.log("[getClientCredentials] No credentials found, returning null");
   return null;
 }
 
@@ -376,7 +384,17 @@ export const appRouter = router({
           errors: results.filter((r) => r.status === "error").length,
         };
 
+        // Get clientId for logging
+        let clientId: number | undefined;
+        if (input.clientKey) {
+          const client = await getClientByKey(input.clientKey);
+          if (client) {
+            clientId = client.id;
+          }
+        }
+
         await saveVerificationLog({
+          clientId,
           totalRecords: summary.total,
           synced: summary.found,
           notFound: summary.not_found,
@@ -411,9 +429,21 @@ export const appRouter = router({
         return { exists: data?.Exists || false };
       }),
 
-    getVerificationHistory: publicProcedure.query(async () => {
-      return await getVerificationHistory();
-    }),
+    getVerificationHistory: publicProcedure
+      .input(z.object({ clientKey: z.string().optional() }))
+      .query(async ({ input }) => {
+        let clientId: number | undefined;
+        
+        // If clientKey provided, get the client ID
+        if (input.clientKey) {
+          const client = await getClientByKey(input.clientKey);
+          if (client) {
+            clientId = client.id;
+          }
+        }
+        
+        return await getVerificationHistory(clientId);
+      }),
   }),
 
   clients: router({

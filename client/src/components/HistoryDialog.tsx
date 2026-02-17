@@ -5,6 +5,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import { useThemeColor } from "@/contexts/ThemeColorContext";
+import { useClientKey } from "@/contexts/ClientKeyContext";
 import { Clock, CheckCircle2, XCircle, AlertCircle, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -17,10 +18,12 @@ interface HistoryDialogProps {
 export default function HistoryDialog({ open, onOpenChange }: HistoryDialogProps) {
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
+  const { clientKey } = useClientKey();
   
-  const { data: history, isLoading } = trpc.egixia.getVerificationHistory.useQuery(undefined, {
-    enabled: open,
-  });
+  const { data: history, isLoading } = trpc.egixia.getVerificationHistory.useQuery(
+    { clientKey: clientKey || undefined },
+    { enabled: open }
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
