@@ -43,3 +43,17 @@
 - [ ] Aplicar trim() a códigos de proveedor que vienen de la respuesta de la API (no solo al enviar)
 - [x] Agregar vista de historial de verificaciones en el menú de configuración (desplegable en header con Settings + History)
 - [x] BUG CRÍTICO: Proveedor 1204860 existe pero se marca como "Proveedor no existe" - debe ir a "No encontradas" si OC no existe pero proveedor SÍ (corregido en checkpoint anterior)
+
+## Gestión de Clientes Multi-tenant
+- [x] Crear tabla `clients` en drizzle/schema.ts con campos: id, name, baseUrl, userName, password (encrypted), clientId (encrypted), clientSecret (encrypted), primaryColor, isActive, createdAt
+- [x] Implementar sistema de encriptación/desencriptación para campos sensibles usando crypto (AES-256-CBC)
+- [x] Crear helpers en server/db.ts: getClients, getClientById, createClient, updateClient, deleteClient, getActiveClient, setActiveClient
+- [x] Crear endpoints tRPC en server/routers.ts: clients.list, clients.getById, clients.create, clients.update, clients.delete, clients.getActive, clients.setActive
+- [x] Crear página client/src/pages/ClientsManagement.tsx con lista de clientes (nombre, color, usuario visible, datos sensibles enmascarados)
+- [x] Crear componente ClientDialog para crear/editar clientes con formulario completo
+- [x] Agregar enlace "Gestión de Clientes" en el menú desplegable del header
+- [x] Modificar getActiveClientCredentials() para usar credenciales del cliente activo con fallback a api_configs (backward compatibility)
+- [x] Actualizar todos los endpoints (verifyBatch, checkSupplier, testConnection) para usar getActiveClientCredentials()
+- [x] Actualizar tests para reflejar el nuevo sistema de clientes (18 tests pasando)
+- [x] ThemeColorContext carga automáticamente el color del cliente activo (prioridad: URL param > cliente activo > default)
+- [x] Validación: si no hay cliente activo ni api_configs, mostrar mensaje solicitando configuración

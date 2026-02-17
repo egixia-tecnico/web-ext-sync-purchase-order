@@ -5,9 +5,10 @@
  */
 import { useThemeColor } from "@/contexts/ThemeColorContext";
 import { useOCSync } from "@/contexts/OCSyncContext";
-import { Settings2, RefreshCw, Wifi, WifiOff, Loader2, History, ChevronDown } from "lucide-react";
+import { Settings2, RefreshCw, Wifi, WifiOff, Loader2, History, ChevronDown, Users } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState } from "react";
+import { useLocation } from "wouter";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +25,7 @@ export default function AppHeader({ onSettingsClick, onHistoryClick }: AppHeader
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
   const { connectionStatus } = useOCSync();
+  const [, navigate] = useLocation();
 
   return (
     <motion.header
@@ -93,10 +95,14 @@ export default function AppHeader({ onSettingsClick, onHistoryClick }: AppHeader
                 <ChevronDown className="w-3 h-3" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={() => navigate("/clients")} className="cursor-pointer">
+                <Users className="w-4 h-4 mr-2" />
+                Gestión de Clientes
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={onSettingsClick} className="cursor-pointer">
                 <Settings2 className="w-4 h-4 mr-2" />
-                Configuración API
+                Configuración API (Legacy)
               </DropdownMenuItem>
               <DropdownMenuItem onClick={onHistoryClick} className="cursor-pointer">
                 <History className="w-4 h-4 mr-2" />

@@ -3,12 +3,51 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { getDefaultApiConfig, upsertApiConfig, saveVerificationLog, getVerificationHistory } from "./db";
+import { getDefaultApiConfig, upsertApiConfig, saveVerificationLog, getVerificationHistory, getClients, getClientById, getActiveClient, createClient, updateClient, deleteClient, setActiveClient } from "./db";
+import { encrypt, decrypt, maskValue } from "./encryption";
 import axios from "axios";
 
 // ===== Token management (server-side) =====
 let cachedToken: string | null = null;
 let tokenExpiry: number = 0;
+
+/**
+ * Get active client credentials (decrypted)
+ * Falls back to api_configs if no client is active (for backward compatibility)
+ */
+async function getActiveClientCredentials(): Promise<{
+  baseUrl: string;
+  userName: string;
+  password: string;
+  clientId: string;
+  clientSecret: string;
+} | null> {
+  // Try to get active client first
+  const activeClient = await getActiveClient();
+  if (activeClient) {
+    return {
+      baseUrl: activeClient.baseUrl,
+      userName: activeClient.userName,
+      password: decrypt(activeClient.password),
+      clientId: decrypt(activeClient.clientId),
+      clientSecret: decrypt(activeClient.clientSecret),
+    };
+  }
+
+  // Fallback to legacy api_configs for backward compatibility
+  const legacyConfig = await getDefaultApiConfig();
+  if (legacyConfig) {
+    return {
+      baseUrl: legacyConfig.baseUrl,
+      userName: legacyConfig.userName,
+      password: legacyConfig.password,
+      clientId: legacyConfig.clientId,
+      clientSecret: legacyConfig.clientSecret,
+    };
+  }
+
+  return null;
+}
 
 async function getToken(baseUrl: string, userName: string, password: string, clientId: string, clientSecret: string): Promise<string> {
   const now = Date.now();
@@ -184,11 +223,11 @@ export const appRouter = router({
             clientSecret: input.clientSecret,
           };
         } else {
-          console.log("[Egixia] testConnection: using stored credentials");
-          const stored = await getDefaultApiConfig();
+          console.log("[Egixia] testConnection: using active client credentials");
+          const stored = await getActiveClientCredentials();
           if (!stored) {
-            console.log("[Egixia] testConnection: no stored config found");
-            return { success: false, message: "No hay configuración de API almacenada. Configure las credenciales primero." };
+            console.log("[Egixia] testConnection: no active client found");
+            return { success: false, message: "No hay cliente activo configurado. Configure un cliente primero." };
           }
           config = stored;
         }
@@ -243,9 +282,9 @@ export const appRouter = router({
         purchaseOrderNumber: z.string(),
       }))
       .mutation(async ({ input }) => {
-        const config = await getDefaultApiConfig();
+        const config = await getActiveClientCredentials();
         if (!config) {
-          return { success: false, error: "No hay configuración de API. Configure las credenciales.", status: "error" as const };
+          return { success: false, error: "No hay cliente activo configurado. Configure un cliente primero.", status: "error" as const };
         }
 
         try {
@@ -293,9 +332,9 @@ export const appRouter = router({
         })),
       }))
       .mutation(async ({ input }) => {
-        const config = await getDefaultApiConfig();
+        const config = await getActiveClientCredentials();
         if (!config) {
-          return { success: false, error: "No hay configuración de API. Configure las credenciales.", results: [] as any[] };
+          return { success: false, error: "No hay cliente activo configurado. Configure un cliente primero.", results: [] as any[] };
         }
 
         console.log(`[Egixia] verifyBatch: starting verification of ${input.records.length} records`);
@@ -480,9 +519,9 @@ export const appRouter = router({
         supplierCode: z.string(),
       }))
       .mutation(async ({ input }) => {
-        const config = await getDefaultApiConfig();
+        const config = await getActiveClientCredentials();
         if (!config) {
-          return { success: false, error: "No hay configuración de API." };
+          return { success: false, error: "No hay cliente activo configurado." };
         }
 
         try {
@@ -517,6 +556,135 @@ export const appRouter = router({
           durationMs: log.executionTimeMs,
           executedAt: log.createdAt,
         }));
+      }),
+  }),
+
+  // ===== Clients router =====
+  clients: router({
+    list: publicProcedure
+      .query(async () => {
+        const allClients = await getClients();
+        // Return clients with masked sensitive data
+        return allClients.map(client => ({
+          id: client.id,
+          name: client.name,
+          baseUrl: client.baseUrl,
+          userName: client.userName,
+          passwordMasked: maskValue(decrypt(client.password)),
+          clientIdMasked: maskValue(decrypt(client.clientId)),
+          clientSecretMasked: maskValue(decrypt(client.clientSecret)),
+          primaryColor: client.primaryColor,
+          isActive: client.isActive,
+          createdAt: client.createdAt,
+          updatedAt: client.updatedAt,
+        }));
+      }),
+
+    getById: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const client = await getClientById(input.id);
+        if (!client) return null;
+        
+        // Return with decrypted values for editing
+        return {
+          id: client.id,
+          name: client.name,
+          baseUrl: client.baseUrl,
+          userName: client.userName,
+          password: decrypt(client.password),
+          clientId: decrypt(client.clientId),
+          clientSecret: decrypt(client.clientSecret),
+          primaryColor: client.primaryColor,
+          isActive: client.isActive,
+        };
+      }),
+
+    getActive: publicProcedure
+      .query(async () => {
+        const client = await getActiveClient();
+        if (!client) return null;
+        
+        return {
+          id: client.id,
+          name: client.name,
+          baseUrl: client.baseUrl,
+          userName: client.userName,
+          primaryColor: client.primaryColor,
+          isActive: client.isActive,
+        };
+      }),
+
+    create: publicProcedure
+      .input(z.object({
+        name: z.string().min(1),
+        baseUrl: z.string().url(),
+        userName: z.string().min(1),
+        password: z.string().min(1),
+        clientId: z.string().min(1),
+        clientSecret: z.string().min(1),
+        primaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+        isActive: z.boolean().default(false),
+      }))
+      .mutation(async ({ input }) => {
+        // Encrypt sensitive fields
+        const encryptedData = {
+          name: input.name,
+          baseUrl: input.baseUrl.replace(/\/$/, ""), // Remove trailing slash
+          userName: input.userName,
+          password: encrypt(input.password),
+          clientId: encrypt(input.clientId),
+          clientSecret: encrypt(input.clientSecret),
+          primaryColor: input.primaryColor,
+          isActive: input.isActive,
+        };
+
+        await createClient(encryptedData);
+        return { success: true };
+      }),
+
+    update: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().min(1).optional(),
+        baseUrl: z.string().url().optional(),
+        userName: z.string().min(1).optional(),
+        password: z.string().min(1).optional(),
+        clientId: z.string().min(1).optional(),
+        clientSecret: z.string().min(1).optional(),
+        primaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+        isActive: z.boolean().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        
+        // Encrypt sensitive fields if provided
+        const updateData: any = {};
+        if (data.name) updateData.name = data.name;
+        if (data.baseUrl) updateData.baseUrl = data.baseUrl.replace(/\/$/, "");
+        if (data.userName) updateData.userName = data.userName;
+        if (data.password) updateData.password = encrypt(data.password);
+        if (data.clientId) updateData.clientId = encrypt(data.clientId);
+        if (data.clientSecret) updateData.clientSecret = encrypt(data.clientSecret);
+        if (data.primaryColor) updateData.primaryColor = data.primaryColor;
+        if (data.isActive !== undefined) updateData.isActive = data.isActive;
+
+        await updateClient(id, updateData);
+        return { success: true };
+      }),
+
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deleteClient(input.id);
+        return { success: true };
+      }),
+
+    setActive: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await setActiveClient(input.id);
+        return { success: true };
       }),
   }),
 });

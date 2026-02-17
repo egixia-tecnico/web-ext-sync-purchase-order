@@ -55,3 +55,24 @@ export const verificationLogs = mysqlTable("verification_logs", {
 });
 
 export type VerificationLog = typeof verificationLogs.$inferSelect;
+
+/**
+ * Clients table - stores multi-tenant client configurations
+ * Sensitive fields (password, clientId, clientSecret) are encrypted
+ */
+export const clients = mysqlTable("clients", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  baseUrl: varchar("baseUrl", { length: 512 }).notNull(),
+  userName: varchar("userName", { length: 255 }).notNull(),
+  password: text("password").notNull(), // encrypted
+  clientId: text("clientId").notNull(), // encrypted
+  clientSecret: text("clientSecret").notNull(), // encrypted
+  primaryColor: varchar("primaryColor", { length: 7 }).notNull().default("#10b981"), // hex color
+  isActive: boolean("isActive").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Client = typeof clients.$inferSelect;
+export type InsertClient = typeof clients.$inferInsert;

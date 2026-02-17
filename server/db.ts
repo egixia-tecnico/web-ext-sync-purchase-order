@@ -1,6 +1,6 @@
 import { eq, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, apiConfigs, InsertApiConfig, verificationLogs } from "../drizzle/schema";
+import { InsertUser, users, apiConfigs, InsertApiConfig, verificationLogs, clients, InsertClient, Client } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -161,4 +161,73 @@ export async function getVerificationHistory(limit: number = 20) {
     .limit(limit);
 
   return logs;
+}
+
+// ===== Clients management =====
+
+export async function getClients() {
+  const db = await getDb();
+  if (!db) return [];
+
+  const allClients = await db.select().from(clients).orderBy(desc(clients.createdAt));
+  return allClients;
+}
+
+export async function getClientById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db.select().from(clients).where(eq(clients.id, id)).limit(1);
+  return result[0] || null;
+}
+
+export async function getActiveClient() {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db.select().from(clients).where(eq(clients.isActive, true)).limit(1);
+  return result[0] || null;
+}
+
+export async function createClient(data: InsertClient) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // If this client is set as active, deactivate all others first
+  if (data.isActive) {
+    await db.update(clients).set({ isActive: false });
+  }
+
+  const result = await db.insert(clients).values(data);
+  return result;
+}
+
+export async function updateClient(id: number, data: Partial<InsertClient>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // If setting this client as active, deactivate all others first
+  if (data.isActive === true) {
+    await db.update(clients).set({ isActive: false });
+  }
+
+  await db.update(clients).set(data).where(eq(clients.id, id));
+}
+
+export async function deleteClient(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.delete(clients).where(eq(clients.id, id));
+}
+
+export async function setActiveClient(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Deactivate all clients first
+  await db.update(clients).set({ isActive: false });
+  
+  // Activate the selected client
+  await db.update(clients).set({ isActive: true }).where(eq(clients.id, id));
 }

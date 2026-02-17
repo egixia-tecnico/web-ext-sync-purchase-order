@@ -15,6 +15,13 @@
       "when": 1770832163406,
       "tag": "0001_deep_post",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1771306910996,
+      "tag": "0002_nervous_crystal",
+      "breakpoints": true
     }
   ]
 }

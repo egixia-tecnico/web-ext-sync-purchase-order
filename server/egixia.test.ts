@@ -17,15 +17,24 @@ vi.mock("./db", () => ({
   saveVerificationLog: vi.fn(),
   upsertUser: vi.fn(),
   getUserByOpenId: vi.fn(),
+  getActiveClient: vi.fn(),
+  getClients: vi.fn(),
+  getClientById: vi.fn(),
+  createClient: vi.fn(),
+  updateClient: vi.fn(),
+  deleteClient: vi.fn(),
+  setActiveClient: vi.fn(),
+  getVerificationHistory: vi.fn(),
 }));
 
 import axios from "axios";
-import { getDefaultApiConfig, upsertApiConfig, saveVerificationLog } from "./db";
+import { getDefaultApiConfig, upsertApiConfig, saveVerificationLog, getActiveClient } from "./db";
 
 const mockedAxios = vi.mocked(axios);
 const mockedGetConfig = vi.mocked(getDefaultApiConfig);
 const mockedUpsertConfig = vi.mocked(upsertApiConfig);
 const mockedSaveLog = vi.mocked(saveVerificationLog);
+const mockedGetActiveClient = vi.mocked(getActiveClient);
 
 function createContext(): TrpcContext {
   return {
@@ -81,14 +90,16 @@ describe("egixia.testConnection", () => {
   });
 
   it("returns failure when no config and no input", async () => {
+    mockedGetActiveClient.mockResolvedValue(null);
     mockedGetConfig.mockResolvedValue(undefined);
     const caller = appRouter.createCaller(createContext());
     const result = await caller.egixia.testConnection(undefined);
     expect(result.success).toBe(false);
-    expect(result.message).toContain("No hay configuración");
+    expect(result.message).toContain("No hay cliente activo");
   });
 
   it("returns success when token is obtained", async () => {
+    mockedGetActiveClient.mockResolvedValue(null);
     mockedGetConfig.mockResolvedValue({
       id: 1,
       configName: "default",
@@ -175,16 +186,18 @@ describe("egixia.verifyBatch", () => {
   });
 
   it("returns error when no config exists", async () => {
+    mockedGetActiveClient.mockResolvedValue(null);
     mockedGetConfig.mockResolvedValue(undefined);
     const caller = appRouter.createCaller(createContext());
     const result = await caller.egixia.verifyBatch({
       records: [{ buyerCode: "0100", supplierCode: "1222748", purchaseOrderNumber: "3300293553" }],
     });
     expect(result.success).toBe(false);
-    expect(result.error).toContain("No hay configuración");
+    expect(result.error).toContain("No hay cliente activo");
   });
 
   it("verifies a synced OC correctly", async () => {
+    mockedGetActiveClient.mockResolvedValue(null);
     mockedGetConfig.mockResolvedValue({
       id: 1,
       configName: "default",
@@ -245,6 +258,7 @@ describe("egixia.verifyBatch", () => {
   });
 
   it("verifies a not_found OC and checks supplier", async () => {
+    mockedGetActiveClient.mockResolvedValue(null);
     mockedGetConfig.mockResolvedValue({
       id: 1,
       configName: "default",
@@ -305,6 +319,7 @@ describe("egixia.checkSupplier", () => {
   });
 
   it("returns error when no config", async () => {
+    mockedGetActiveClient.mockResolvedValue(null);
     mockedGetConfig.mockResolvedValue(undefined);
     const caller = appRouter.createCaller(createContext());
     const result = await caller.egixia.checkSupplier({ supplierCode: "1222748" });
