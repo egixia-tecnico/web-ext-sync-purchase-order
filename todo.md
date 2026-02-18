@@ -129,3 +129,13 @@
 - [ ] Integrar servicio de notificaciones de Manus para envío real de magic links por correo - PENDIENTE: Requiere configuración de SMTP o servicio de correo externo (SendGrid/AWS SES). El servicio notifyOwner de Manus solo envía notificaciones al dueño del proyecto, no correos a direcciones arbitrarias.
 - [x] Verificar que el endpoint getToken reciba correctamente las credenciales del cliente seleccionado - RESUELTO: Agregado logging detallado en getActiveClientCredentials
 - [x] Agregar logging detallado en getActiveClientCredentials para debug - RESUELTO: Logs muestran proceso completo de búsqueda de credenciales
+
+## Integración de SendGrid para Magic Links
+- [x] Instalar dependencia @sendgrid/mail con pnpm
+- [x] Solicitar SENDGRID_API_KEY y SENDGRID_FROM_EMAIL mediante webdev_request_secrets
+- [x] Crear módulo server/email.ts con función sendMagicLinkEmail
+- [x] Diseñar plantilla HTML profesional para el correo de magic link (diseño responsive con gradiente verde Egixia)
+- [x] Actualizar endpoint auth.sendMagicLink para usar SendGrid en lugar de console.log
+- [x] Agregar manejo de errores y logging para envío de correos (fallback a console.log si SendGrid no está configurado)
+- [x] Crear test de validación de configuración de SendGrid (sendgrid.test.ts)
+- [x] Tests pasando (22/22) - el test de sendMagicLink envía correo real exitosamente

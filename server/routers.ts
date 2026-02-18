@@ -4,6 +4,7 @@ import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { getDefaultApiConfig, upsertApiConfig, saveVerificationLog, getVerificationHistory, getClients, getClientById, getClientByKey, getActiveClient, createClient, updateClient, deleteClient, setActiveClient, createMagicLink, getMagicLinkByToken, markMagicLinkAsUsed } from "./db";
 import { encrypt, decrypt, maskValue } from "./encryption";
+import { sendMagicLinkEmail, isSendGridConfigured } from "./email";
 import axios from "axios";
 import { AXIOS_TIMEOUT_MS } from "@shared/const";
 
@@ -201,11 +202,23 @@ export const appRouter = router({
           used: false,
         });
         
-        // TODO: Send email with magic link using Manus notification service
-        // For now, return the token for testing
-        console.log(`Magic link token for ${email}: ${token}`);
+        // Construct callback URL (use frontend URL from env or fallback to localhost)
+        const frontendUrl = process.env.VITE_FRONTEND_FORGE_API_URL?.replace("/api", "") || "http://localhost:3000";
+        const callbackUrl = `${frontendUrl}/admin/callback?token=${token}`;
         
-        return { success: true, message: "Link mágico enviado a tu correo" };
+        // Send email with magic link
+        if (isSendGridConfigured()) {
+          const emailSent = await sendMagicLinkEmail(email, token, callbackUrl);
+          if (!emailSent) {
+            throw new Error("Error al enviar el correo. Por favor inténtalo de nuevo.");
+          }
+          return { success: true, message: "Link mágico enviado a tu correo" };
+        } else {
+          // Fallback for testing: print token to console
+          console.log(`[Magic Link] Token para ${email}: ${token}`);
+          console.log(`[Magic Link] URL: ${callbackUrl}`);
+          return { success: true, message: "Link mágico generado (revisa la consola del servidor)" };
+        }
       }),
     
     validateMagicLink: publicProcedure
