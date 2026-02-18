@@ -146,3 +146,9 @@
 - [x] Actualizar AdminLogin.tsx para pasar window.location.origin al endpoint
 - [x] El endpoint ahora construye callbackUrl usando input.origin || "http://localhost:3000"
 - [ ] Probar flujo completo: solicitar magic link → verificar URL correcta en correo → validar acceso
+
+## Corrección de Error de Assets en Producción
+- [x] BUG CRÍTICO: Error "Minified React error #318" al acceder a /clients en producción después de autenticación con magic link - CAUSA: Cookie admin_session sin flag Secure en HTTPS
+- [x] Revisar configuración de Vite (vite.config.ts) para producción - configuración correcta
+- [x] Agregar flag Secure a cookie admin_session cuando NODE_ENV=production
+- [ ] Probar flujo completo: magic link → autenticación → redirección a /clients en producción (requiere nuevo checkpoint y publicación)

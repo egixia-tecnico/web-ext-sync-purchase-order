@@ -251,9 +251,11 @@ export const appRouter = router({
         
         // Create admin session (set cookie with email)
         const sessionData = JSON.stringify({ email: magicLink.email, isAdmin: true });
+        const isProduction = process.env.NODE_ENV === "production";
+        const secureCookie = isProduction ? "; Secure" : "";
         ctx.res.setHeader(
           "Set-Cookie",
-          `admin_session=${sessionData}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`
+          `admin_session=${sessionData}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${secureCookie}`
         );
         
         return { success: true, email: magicLink.email };
