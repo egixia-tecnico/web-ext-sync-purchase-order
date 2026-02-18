@@ -32,7 +32,10 @@ export default function AdminLogin() {
       toast.error("Solo se permiten correos @egixia.com");
       return;
     }
-    sendMagicLink.mutate({ email });
+    sendMagicLink.mutate({ 
+      email,
+      origin: window.location.origin 
+    });
   };
 
   return (

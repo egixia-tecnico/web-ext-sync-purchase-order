@@ -139,3 +139,10 @@
 - [x] Agregar manejo de errores y logging para envío de correos (fallback a console.log si SendGrid no está configurado)
 - [x] Crear test de validación de configuración de SendGrid (sendgrid.test.ts)
 - [x] Tests pasando (22/22) - el test de sendMagicLink envía correo real exitosamente
+
+## Corrección de URL de Magic Link
+- [x] BUG: El correo de magic link usa dominio incorrecto (forge.manus.ai en lugar del dominio de la aplicación) - RESUELTO
+- [x] Modificar endpoint auth.sendMagicLink para recibir origin desde el frontend (parámetro opcional)
+- [x] Actualizar AdminLogin.tsx para pasar window.location.origin al endpoint
+- [x] El endpoint ahora construye callbackUrl usando input.origin || "http://localhost:3000"
+- [ ] Probar flujo completo: solicitar magic link → verificar URL correcta en correo → validar acceso

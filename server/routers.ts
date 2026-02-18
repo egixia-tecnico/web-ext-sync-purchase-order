@@ -181,7 +181,10 @@ export const appRouter = router({
     }),
     
     sendMagicLink: publicProcedure
-      .input(z.object({ email: z.string().email() }))
+      .input(z.object({ 
+        email: z.string().email(),
+        origin: z.string().optional() 
+      }))
       .mutation(async ({ input }) => {
         const { email } = input;
         
@@ -202,8 +205,8 @@ export const appRouter = router({
           used: false,
         });
         
-        // Construct callback URL (use frontend URL from env or fallback to localhost)
-        const frontendUrl = process.env.VITE_FRONTEND_FORGE_API_URL?.replace("/api", "") || "http://localhost:3000";
+        // Construct callback URL (use origin from frontend or fallback to localhost)
+        const frontendUrl = input.origin || "http://localhost:3000";
         const callbackUrl = `${frontendUrl}/admin/callback?token=${token}`;
         
         // Send email with magic link
