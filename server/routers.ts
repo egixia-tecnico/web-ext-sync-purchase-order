@@ -2,8 +2,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { getDefaultApiConfig, upsertApiConfig, saveVerificationLog, getVerificationHistory, getClients, getClientById, getClientByKey, getActiveClient, createClient, updateClient, deleteClient, setActiveClient, createMagicLink, getMagicLinkByToken, markMagicLinkAsUsed } from "./db";
-import { encrypt, decrypt, maskValue } from "./encryption";
+import { saveVerificationLog, getVerificationHistory, getClients, getClientById, getClientByKey, getActiveClient, createClient, updateClient, deleteClient, setActiveClient, createMagicLink, getMagicLinkByToken, markMagicLinkAsUsed } from "./db";
 import { sendMagicLinkEmail, isSendGridConfigured } from "./email";
 import axios from "axios";
 import { AXIOS_TIMEOUT_MS } from "@shared/const";
@@ -41,9 +40,9 @@ async function getClientCredentials(clientKey?: string): Promise<{
       return {
         baseUrl: client.baseUrl,
         userName: client.userName,
-        password: decrypt(client.password),
-        clientId: decrypt(client.clientId),
-        clientSecret: decrypt(client.clientSecret),
+        password: client.password,
+        clientId: client.clientId,
+        clientSecret: client.clientSecret,
         clientName: client.name,
         primaryColor: client.primaryColor,
         syncRules: client.syncRules,
@@ -63,29 +62,12 @@ async function getClientCredentials(clientKey?: string): Promise<{
     return {
       baseUrl: activeClient.baseUrl,
       userName: activeClient.userName,
-      password: decrypt(activeClient.password),
-      clientId: decrypt(activeClient.clientId),
-      clientSecret: decrypt(activeClient.clientSecret),
+      password: activeClient.password,
+      clientId: activeClient.clientId,
+      clientSecret: activeClient.clientSecret,
       clientName: activeClient.name,
       primaryColor: activeClient.primaryColor,
       syncRules: activeClient.syncRules,
-    };
-  }
-
-  // Priority 3: Fallback to legacy api_configs for backward compatibility
-  console.log("[getClientCredentials] No active client, trying legacy config...");
-  const legacyConfig = await getDefaultApiConfig();
-  console.log("[getClientCredentials] Legacy config:", legacyConfig ? "found" : "not found");
-  if (legacyConfig) {
-    return {
-      baseUrl: legacyConfig.baseUrl,
-      userName: legacyConfig.userName,
-      password: legacyConfig.password,
-      clientId: legacyConfig.clientId,
-      clientSecret: legacyConfig.clientSecret,
-      clientName: "Legacy Config",
-      primaryColor: "#10b981",
-      syncRules: null,
     };
   }
 
@@ -283,48 +265,7 @@ export const appRouter = router({
     }),
   }),
 
-  apiConfig: router({
-    get: publicProcedure.query(async () => {
-      const config = await getDefaultApiConfig();
-      if (!config) return null;
-      return {
-        baseUrl: config.baseUrl,
-        userName: config.userName,
-        password: config.password,
-        clientId: config.clientId,
-        clientSecret: config.clientSecret,
-      };
-    }),
-
-    upsert: publicProcedure
-      .input(z.object({
-        baseUrl: z.string().url(),
-        userName: z.string().min(1),
-        password: z.string().min(1),
-        clientId: z.string().min(1),
-        clientSecret: z.string().min(1),
-      }))
-      .mutation(async ({ input }) => {
-        const cleanBaseUrl = input.baseUrl.replace(/\/$/, "");
-        await upsertApiConfig({ ...input, baseUrl: cleanBaseUrl });
-        cachedToken = null;
-        tokenExpiry = 0;
-        return { success: true };
-      }),
-
-    testConnection: publicProcedure
-      .input(z.object({ clientKey: z.string().optional() }))
-      .mutation(async ({ input }) => {
-        const credentials = await getClientCredentials(input.clientKey);
-        if (!credentials) {
-          throw new Error("No hay configuración de API disponible");
-        }
-
-        const { baseUrl, userName, password, clientId, clientSecret } = credentials;
-        await getToken(baseUrl, userName, password, clientId, clientSecret);
-        return { success: true, message: "Conexión exitosa" };
-      }),
-  }),
+// apiConfig router removed - all configuration now managed through clients router
 
   egixia: router({
     verifyPurchaseOrders: publicProcedure
@@ -473,9 +414,9 @@ export const appRouter = router({
         name: client.name,
         baseUrl: client.baseUrl,
         userName: client.userName,
-        password: maskValue(decrypt(client.password)),
-        clientId: maskValue(decrypt(client.clientId)),
-        clientSecret: maskValue(decrypt(client.clientSecret)),
+        password: client.password,
+        clientId: client.clientId,
+        clientSecret: client.clientSecret,
         primaryColor: client.primaryColor,
         syncRules: client.syncRules,
         isActive: client.isActive,
@@ -495,9 +436,9 @@ export const appRouter = router({
           name: client.name,
           baseUrl: client.baseUrl,
           userName: client.userName,
-          password: maskValue(decrypt(client.password)),
-          clientId: maskValue(decrypt(client.clientId)),
-          clientSecret: maskValue(decrypt(client.clientSecret)),
+          password: client.password,
+          clientId: client.clientId,
+          clientSecret: client.clientSecret,
           primaryColor: client.primaryColor,
           syncRules: client.syncRules,
           isActive: client.isActive,
@@ -518,20 +459,20 @@ export const appRouter = router({
         isActive: z.boolean().default(false),
       }))
       .mutation(async ({ input }) => {
-        const encryptedData = {
+        const clientData = {
           clientKey: input.clientKey,
           name: input.name,
           baseUrl: input.baseUrl.replace(/\/$/, ""),
           userName: input.userName,
-          password: encrypt(input.password),
-          clientId: encrypt(input.clientId),
-          clientSecret: encrypt(input.clientSecret),
+          password: input.password,
+          clientId: input.clientId,
+          clientSecret: input.clientSecret,
           primaryColor: input.primaryColor,
           syncRules: input.syncRules,
           isActive: input.isActive,
         };
 
-        await createClient(encryptedData);
+        await createClient(clientData);
         return { success: true };
       }),
 
@@ -557,9 +498,9 @@ export const appRouter = router({
         if (data.name) updateData.name = data.name;
         if (data.baseUrl) updateData.baseUrl = data.baseUrl.replace(/\/$/, "");
         if (data.userName) updateData.userName = data.userName;
-        if (data.password) updateData.password = encrypt(data.password);
-        if (data.clientId) updateData.clientId = encrypt(data.clientId);
-        if (data.clientSecret) updateData.clientSecret = encrypt(data.clientSecret);
+        if (data.password) updateData.password = data.password;
+        if (data.clientId) updateData.clientId = data.clientId;
+        if (data.clientSecret) updateData.clientSecret = data.clientSecret;
         if (data.primaryColor) updateData.primaryColor = data.primaryColor;
         if (data.syncRules !== undefined) updateData.syncRules = data.syncRules;
         if (data.isActive !== undefined) updateData.isActive = data.isActive;

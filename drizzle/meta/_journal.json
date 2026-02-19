@@ -43,6 +43,13 @@
       "when": 1771359350090,
       "tag": "0005_cynical_plazm",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1771501070670,
+      "tag": "0006_stiff_the_order",
+      "breakpoints": true
     }
   ]
 }

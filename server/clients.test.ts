@@ -1,36 +1,8 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { appRouter } from "./routers";
-import { encrypt, decrypt, maskValue } from "./encryption";
-
-describe("Encryption", () => {
-  it("should encrypt and decrypt a value correctly", () => {
-    const original = "my-secret-password-123";
-    const encrypted = encrypt(original);
-    const decrypted = decrypt(encrypted);
-    
-    expect(encrypted).not.toBe(original);
-    expect(encrypted).toContain(":");
-    expect(decrypted).toBe(original);
-  });
-
-  it("should mask sensitive values", () => {
-    const value = "a4559cf615a14a20acb38b6eef9d315e";
-    const masked = maskValue(value);
-    
-    expect(masked).toBe("a45***15e");
-    expect(masked).not.toBe(value);
-  });
-
-  it("should mask short values as ***", () => {
-    const value = "short";
-    const masked = maskValue(value);
-    
-    expect(masked).toBe("***");
-  });
-});
 
 describe("clients.create", () => {
-  it("should create a client with encrypted sensitive fields", async () => {
+  it("should create a client with plain text credentials", async () => {
     const caller = appRouter.createCaller({} as any);
     const uniqueKey = `testclient_${Date.now()}`;
     
@@ -51,7 +23,7 @@ describe("clients.create", () => {
 });
 
 describe("clients.list", () => {
-  it("should return clients with masked sensitive data", async () => {
+  it("should return clients with plain text credentials", async () => {
     const caller = appRouter.createCaller({} as any);
     const clients = await caller.clients.list();
     
@@ -72,10 +44,10 @@ describe("clients.list", () => {
       expect(client).toHaveProperty("isActive");
       expect(client).toHaveProperty("createdAt");
       
-      // Verify masked values don't contain full sensitive data
-      expect(client.password).toContain("***");
-      expect(client.clientId).toContain("***");
-      expect(client.clientSecret).toContain("***");
+      // Credentials are stored in plain text
+      expect(typeof client.password).toBe("string");
+      expect(typeof client.clientId).toBe("string");
+      expect(typeof client.clientSecret).toBe("string");
     }
   });
 });

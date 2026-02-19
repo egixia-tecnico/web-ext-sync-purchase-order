@@ -1,6 +1,6 @@
 import { eq, desc, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, apiConfigs, InsertApiConfig, verificationLogs, clients, InsertClient, Client, magicLinks, InsertMagicLink } from "../drizzle/schema";
+import { InsertUser, users, verificationLogs, clients, InsertClient, Client, magicLinks, InsertMagicLink } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -87,53 +87,7 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// ===== API Config functions =====
-
-export async function getDefaultApiConfig() {
-  const db = await getDb();
-  if (!db) return undefined;
-
-  const result = await db.select().from(apiConfigs).where(eq(apiConfigs.isDefault, true)).limit(1);
-  return result.length > 0 ? result[0] : undefined;
-}
-
-export async function upsertApiConfig(config: {
-  baseUrl: string;
-  userName: string;
-  password: string;
-  clientId: string;
-  clientSecret: string;
-  configName?: string;
-}) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  // Check if a default config already exists
-  const existing = await db.select().from(apiConfigs).where(eq(apiConfigs.isDefault, true)).limit(1);
-
-  if (existing.length > 0) {
-    // Update existing default config
-    await db.update(apiConfigs).set({
-      baseUrl: config.baseUrl,
-      userName: config.userName,
-      password: config.password,
-      clientId: config.clientId,
-      clientSecret: config.clientSecret,
-      configName: config.configName || "default",
-    }).where(eq(apiConfigs.id, existing[0].id));
-  } else {
-    // Insert new default config
-    await db.insert(apiConfigs).values({
-      configName: config.configName || "default",
-      baseUrl: config.baseUrl,
-      userName: config.userName,
-      password: config.password,
-      clientId: config.clientId,
-      clientSecret: config.clientSecret,
-      isDefault: true,
-    });
-  }
-}
+// ===== API Config functions removed - all configuration now in clients table =====
 
 export async function saveVerificationLog(log: {
   userId?: number;
