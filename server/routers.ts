@@ -550,8 +550,8 @@ export const appRouter = router({
         clientSecret: z.string().min(1),
       }))
       .mutation(async ({ input }) => {
+        const tokenUrl = `${input.baseUrl.replace(/\/$/, "")}/apimanager/access/gettoken`;
         try {
-          const tokenUrl = `${input.baseUrl.replace(/\/$/, "")}/apimanager/access/gettoken`;
           console.log("[Clients testConnection] Intentando conexion a:", tokenUrl);
           const response = await axios.post(
             tokenUrl,
@@ -567,24 +567,62 @@ export const appRouter = router({
             }
           );
 
+          const requestBody = {
+            username: input.userName,
+            password: input.password,
+            client_id: input.clientId,
+            client_secret: input.clientSecret,
+          };
+
           if (response.data?.access_token) {
             return {
               success: true,
               message: "Conexión exitosa. Credenciales válidas.",
+              debug: {
+                method: "POST",
+                url: tokenUrl,
+                requestHeaders: { "Content-Type": "application/json" },
+                requestBody,
+                responseStatus: response.status,
+                responseData: response.data,
+              },
             };
           } else {
             return {
               success: false,
               message: "Respuesta inválida del servidor. No se recibió token de acceso.",
+              debug: {
+                method: "POST",
+                url: tokenUrl,
+                requestHeaders: { "Content-Type": "application/json" },
+                requestBody,
+                responseStatus: response.status,
+                responseData: response.data,
+              },
             };
           }
         } catch (error: any) {
+          const requestBody = {
+            username: input.userName,
+            password: input.password,
+            client_id: input.clientId,
+            client_secret: input.clientSecret,
+          };
           console.error("[Clients testConnection] Error:", error.message);
           console.error("[Clients testConnection] Status:", error.response?.status);
           console.error("[Clients testConnection] Data:", error.response?.data);
           return {
             success: false,
             message: error.response?.data?.message || error.message || "Error al conectar con el servidor",
+            debug: {
+              method: "POST",
+              url: tokenUrl,
+              requestHeaders: { "Content-Type": "application/json" },
+              requestBody,
+              responseStatus: error.response?.status,
+              responseData: error.response?.data,
+              errorMessage: error.message,
+            },
           };
         }
       }),

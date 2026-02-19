@@ -213,3 +213,12 @@
 - [x] Endpoint debe usar URLbase + credenciales desencriptadas del cliente - Parámetros actualizados (username, password, client_id, client_secret)
 - [x] Probar conexión con cliente Manuelita (id: 90001) - Página /clients carga correctamente
 - [x] Validar que error 403 se resuelva correctamente - Logs agregados para debug
+
+
+## Diálogo de Debug para testConnection
+
+- [x] Modificar endpoint testConnection para retornar detalles de debug (método, URL, body, respuesta) - Endpoint actualizado con objeto debug
+- [x] Crear componente TestConnectionDebugDialog que muestre la información - Componente creado en client/src/components/TestConnectionDebugDialog.tsx
+- [x] Integrar diálogo en ClientDialog al hacer clic en "Probar conexión" - Integrado en ClientDialog.tsx
+- [x] Mostrar método HTTP, URL completa, estructura del body y respuesta del servicio - Implementado en TestConnectionDebugDialog
+- [x] Permitir copiar la información para validación manual en Postman/SoapUI - Botones de copiar agregados para cada sección

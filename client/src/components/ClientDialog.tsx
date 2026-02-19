@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Wifi } from "lucide-react";
 import { toast } from "sonner";
+import { TestConnectionDebugDialog } from "./TestConnectionDebugDialog";
 
 interface ClientDialogProps {
   open: boolean;
@@ -42,6 +43,9 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
 
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionTested, setConnectionTested] = useState(false);
+  const [showDebugDialog, setShowDebugDialog] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [testSuccess, setTestSuccess] = useState(false);
 
   useEffect(() => {
     if (existingClient) {
@@ -118,13 +122,21 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
       if (result.success) {
         toast.success(result.message, { position: "top-center" });
         setConnectionTested(true);
+        setTestSuccess(true);
       } else {
         toast.error(result.message, { position: "top-center" });
         setConnectionTested(false);
+        setTestSuccess(false);
+      }
+      
+      if (result.debug) {
+        setDebugInfo(result.debug);
+        setShowDebugDialog(true);
       }
     } catch (error: any) {
       toast.error(error.message || "Error al probar conexión", { position: "top-center" });
       setConnectionTested(false);
+      setTestSuccess(false);
     } finally {
       setTestingConnection(false);
     }
@@ -314,6 +326,13 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
             </div>
           </form>
         )}
+        
+        <TestConnectionDebugDialog
+          open={showDebugDialog}
+          onOpenChange={setShowDebugDialog}
+          debug={debugInfo}
+          success={testSuccess}
+        />
       </DialogContent>
     </Dialog>
   );
