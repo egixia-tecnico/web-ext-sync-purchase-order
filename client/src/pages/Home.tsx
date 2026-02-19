@@ -36,9 +36,15 @@ export default function Home() {
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
 
-  // Auto-connect removed - connection is now handled by clientKey system
-
-  // Reconnect function removed - handled by clientKey system
+  // Auto-connect when clientData is available
+  useEffect(() => {
+    if (!clientLoading && clientData && clientData.isActive) {
+      setConnectionStatus("connected");
+      setConnectionError(null);
+    } else if (!clientLoading && (!clientData || !clientData.isActive)) {
+      setConnectionStatus("disconnected");
+    }
+  }, [clientLoading, clientData, setConnectionStatus, setConnectionError]);
 
   // Validar que exista clientKey
   if (!clientKey) {

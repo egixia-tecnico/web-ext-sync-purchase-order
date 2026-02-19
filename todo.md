@@ -238,3 +238,13 @@
 - [x] Mostrar número de intento en mensaje de respuesta - Incluido en debug.attempts y debug.totalAttempts
 - [x] Agregar logs de debug para cada intento - console.log para cada intento y error
 - [x] Romper reintentos si error es 4xx (no timeout) - Validación de error.response?.status >= 400 && < 500
+
+
+## DIAGNÓSTICO URGENTE - Error "No hay conexión con la API" al Verificar
+
+- [x] Simular flujo completo al hacer clic en "Verificar pendientes" con clientKey=a4559cf615a14a20acbd8d6eef9d315e - Identificado problema
+- [x] Revisar si OCSyncContext está obteniendo credenciales correctamente - No es problema de credenciales
+- [x] Verificar si hay problema de encriptación que impide match de credenciales - No es problema de encriptación
+- [x] Validar que getClientCredentials retorna datos correctos para Manuelita - Credenciales correctas
+- [x] Corregir problema identificado - connectionStatus nunca se establecía en "connected", agregado useEffect en Home.tsx
+- [ ] Probar con archivo OrdenesCompraPortalTEST.xlsx
