@@ -8,6 +8,7 @@ interface ClientKeyContextType {
     name: string;
     primaryColor: string;
     syncRules: string | null;
+    isActive: boolean;
   } | null;
   loading: boolean;
 }

@@ -551,14 +551,15 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         try {
-          const tokenUrl = `${input.baseUrl.replace(/\/$/, "")}/gettoken`;
+          const tokenUrl = `${input.baseUrl.replace(/\/$/, "")}/apimanager/access/gettoken`;
+          console.log("[Clients testConnection] Intentando conexion a:", tokenUrl);
           const response = await axios.post(
             tokenUrl,
             {
-              user: input.userName,
+              username: input.userName,
               password: input.password,
-              clientId: input.clientId,
-              clientSecret: input.clientSecret,
+              client_id: input.clientId,
+              client_secret: input.clientSecret,
             },
             {
               headers: { "Content-Type": "application/json" },
@@ -579,6 +580,8 @@ export const appRouter = router({
           }
         } catch (error: any) {
           console.error("[Clients testConnection] Error:", error.message);
+          console.error("[Clients testConnection] Status:", error.response?.status);
+          console.error("[Clients testConnection] Data:", error.response?.data);
           return {
             success: false,
             message: error.response?.data?.message || error.message || "Error al conectar con el servidor",

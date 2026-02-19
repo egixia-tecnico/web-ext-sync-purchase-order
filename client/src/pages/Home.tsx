@@ -50,6 +50,24 @@ export default function Home() {
     return <ClientKeyInvalid clientKey={clientKey} />;
   }
 
+  // Validar que el cliente este activo
+  if (!clientLoading && clientData && !clientData.isActive) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
+        <div className="max-w-md text-center space-y-4">
+          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto">
+            <AlertCircle className="w-8 h-8 text-red-600" />
+          </div>
+          <h1 className="text-2xl font-bold text-foreground">Usuario No Disponible</h1>
+          <p className="text-muted-foreground">
+            El cliente {clientData.name} no esta disponible en este momento.
+            Por favor, contacte al administrador del sistema.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <AppHeader onHistoryClick={() => setShowHistory(true)} />

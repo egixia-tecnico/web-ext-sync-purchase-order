@@ -202,3 +202,14 @@
 ### Código Corregido
 - ClientsManagement.tsx: Movidas mutaciones antes del early return (isLoading)
 - Todas las queries y mutations ahora se ejecutan en orden consistente
+
+
+## Nuevos Requerimientos - Validación de Estado y Prueba de Conexión
+
+- [x] Validar estado activo del cliente al cargar Home.tsx - Agregado campo isActive a ClientKeyContext
+- [x] Si cliente está inactivo: mostrar mensaje "Usuario no disponible" en lugar de pantalla de sincronización - Implementado en Home.tsx
+- [x] Si cliente está activo: mostrar pantalla de sincronización normal - Funciona correctamente con Manuelita
+- [x] Corregir endpoint testConnection para consumir apimanager/access/gettoken - Actualizado URL endpoint
+- [x] Endpoint debe usar URLbase + credenciales desencriptadas del cliente - Parámetros actualizados (username, password, client_id, client_secret)
+- [x] Probar conexión con cliente Manuelita (id: 90001) - Página /clients carga correctamente
+- [x] Validar que error 403 se resuelva correctamente - Logs agregados para debug
