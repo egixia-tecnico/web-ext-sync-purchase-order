@@ -1,6 +1,6 @@
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, verificationLogs, clients, InsertClient, Client, magicLinks, InsertMagicLink } from "../drizzle/schema";
+import { InsertUser, users, verificationLogs, clients, InsertClient, Client, magicLinks, InsertMagicLink, integrationLogs } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -230,4 +230,72 @@ export async function markMagicLinkAsUsed(token: string) {
 
   await db.update(magicLinks).set({ used: true }).where(eq(magicLinks.token, token));
   return true;
+}
+
+// ==================== Integration Logs ====================
+
+export async function saveIntegrationLog(data: {
+  clientId: number;
+  url: string;
+  requestBody?: string;
+  responseBody?: string;
+  token?: string;
+  authPrefix?: string;
+  status: string;
+}) {
+  const db = await getDb();
+  if (!db) return false;
+
+  try {
+    // Insert new log
+    await db.insert(integrationLogs).values({
+      clientId: data.clientId,
+      url: data.url,
+      requestBody: data.requestBody || null,
+      responseBody: data.responseBody || null,
+      token: data.token ? data.token.substring(0, 10) + "..." : null, // Partial token
+      authPrefix: data.authPrefix || "Bearer",
+      status: data.status,
+    });
+
+    // Clean old logs - keep only last 20
+    await cleanOldIntegrationLogs(data.clientId);
+    
+    return true;
+  } catch (error) {
+    console.error("[Database] Failed to save integration log:", error);
+    return false;
+  }
+}
+
+export async function getIntegrationLogs(clientId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const result = await db
+    .select()
+    .from(integrationLogs)
+    .where(eq(integrationLogs.clientId, clientId))
+    .orderBy(desc(integrationLogs.createdAt))
+    .limit(20);
+
+  return result;
+}
+
+async function cleanOldIntegrationLogs(clientId: number) {
+  const db = await getDb();
+  if (!db) return;
+
+  // Get all logs for this client, ordered by date desc
+  const allLogs = await db
+    .select({ id: integrationLogs.id })
+    .from(integrationLogs)
+    .where(eq(integrationLogs.clientId, clientId))
+    .orderBy(desc(integrationLogs.createdAt));
+
+  // If more than 20, delete the oldest ones
+  if (allLogs.length > 20) {
+    const idsToDelete = allLogs.slice(20).map(log => log.id);
+    await db.delete(integrationLogs).where(inArray(integrationLogs.id, idsToDelete));
+  }
 }

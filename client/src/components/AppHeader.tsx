@@ -5,7 +5,7 @@
  */
 import { useThemeColor } from "@/contexts/ThemeColorContext";
 import { useOCSync } from "@/contexts/OCSyncContext";
-import { Settings2, RefreshCw, Wifi, WifiOff, Loader2, History, ChevronDown, Users } from "lucide-react";
+import { Settings2, RefreshCw, Wifi, WifiOff, Loader2, History, ChevronDown, Users, FileText } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { useLocation } from "wouter";
@@ -18,9 +18,10 @@ import {
 
 interface AppHeaderProps {
   onHistoryClick: () => void;
+  onLogsClick?: () => void;
 }
 
-export default function AppHeader({ onHistoryClick }: AppHeaderProps) {
+export default function AppHeader({ onHistoryClick, onLogsClick }: AppHeaderProps) {
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
   const { connectionStatus } = useOCSync();
@@ -104,6 +105,13 @@ export default function AppHeader({ onHistoryClick }: AppHeaderProps) {
                 <History className="w-4 h-4 mr-2" />
                 Historial de Verificaciones
               </DropdownMenuItem>
+
+              {onLogsClick && (
+                <DropdownMenuItem onClick={onLogsClick} className="cursor-pointer">
+                  <FileText className="w-4 h-4 mr-2" />
+                  Log de Integraciones
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

@@ -2,7 +2,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { saveVerificationLog, getVerificationHistory, getClients, getClientById, getClientByKey, getActiveClient, createClient, updateClient, deleteClient, setActiveClient, createMagicLink, getMagicLinkByToken, markMagicLinkAsUsed } from "./db";
+import { saveVerificationLog, getVerificationHistory, getClients, getClientById, getClientByKey, getActiveClient, createClient, updateClient, deleteClient, setActiveClient, createMagicLink, getMagicLinkByToken, markMagicLinkAsUsed, getIntegrationLogs, saveIntegrationLog } from "./db";
 import { sendMagicLinkEmail, isSendGridConfigured } from "./email";
 import axios from "axios";
 import { AXIOS_TIMEOUT_MS } from "@shared/const";
@@ -131,6 +131,9 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
 
   console.log(`[Egixia] Calling ${method} ${url}`);
 
+  let responseData: any;
+  let status = "success";
+
   try {
     const response = await axios({
       method,
@@ -142,13 +145,34 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
 
     if (response.status !== 200) {
       console.error(`[Egixia] API HTTP error ${response.status}:`, response.statusText);
+      status = "error";
+      responseData = { error: response.statusText, status: response.status };
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
+    responseData = response.data;
     return response.data;
   } catch (err: any) {
     console.error(`[Egixia] API call failed:`, err.message);
+    status = err.code === 'ECONNABORTED' ? "timeout" : "error";
+    responseData = { error: err.message, code: err.code };
     throw new Error(`Error en llamada a API: ${err.message}`);
+  } finally {
+    // Save integration log (exclude gettoken endpoint)
+    if (!endpoint.includes("/gettoken")) {
+      const client = await getClientByKey(clientKey || "");
+      if (client) {
+        await saveIntegrationLog({
+          clientId: client.id,
+          url,
+          requestBody: body ? JSON.stringify(body) : undefined,
+          responseBody: responseData ? JSON.stringify(responseData) : undefined,
+          token,
+          authPrefix: "Bearer",
+          status,
+        });
+      }
+    }
   }
 }
 
@@ -632,6 +656,18 @@ export const appRouter = router({
             totalAttempts: MAX_RETRIES,
           },
         };
+      }),
+  }),
+
+  logs: router({
+    getIntegrationLogs: publicProcedure
+      .input(z.object({ clientKey: z.string() }))
+      .query(async ({ input }) => {
+        const client = await getClientByKey(input.clientKey);
+        if (!client) {
+          throw new Error("Cliente no encontrado");
+        }
+        return await getIntegrationLogs(client.id);
       }),
   }),
 });

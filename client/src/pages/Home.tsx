@@ -13,6 +13,7 @@ import { motion } from "framer-motion";
 import AppHeader from "@/components/AppHeader";
 
 import HistoryDialog from "@/components/HistoryDialog";
+import IntegrationLogsDialog from "@/components/IntegrationLogsDialog";
 import WorkflowStepper from "@/components/WorkflowStepper";
 import DataUploader from "@/components/DataUploader";
 import KPIDashboard from "@/components/KPIDashboard";
@@ -32,6 +33,7 @@ export default function Home() {
   const { clientKey, clientData, loading: clientLoading } = useClientKey();
 
   const [showHistory, setShowHistory] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
   const { records, connectionStatus, connectionError, setConnectionStatus, setConnectionError, currentStep } = useOCSync();
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
@@ -76,8 +78,12 @@ export default function Home() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <AppHeader onHistoryClick={() => setShowHistory(true)} />
+      <AppHeader 
+        onHistoryClick={() => setShowHistory(true)} 
+        onLogsClick={() => setShowLogs(true)}
+      />
       <HistoryDialog open={showHistory} onOpenChange={setShowHistory} />
+      <IntegrationLogsDialog open={showLogs} onOpenChange={setShowLogs} />
 
       <main className="flex-1">
         {/* Hero section - only in Step 1 (no data loaded) */}

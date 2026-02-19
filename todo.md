@@ -248,3 +248,17 @@
 - [x] Validar que getClientCredentials retorna datos correctos para Manuelita - Credenciales correctas
 - [x] Corregir problema identificado - connectionStatus nunca se establecía en "connected", agregado useEffect en Home.tsx
 - [ ] Probar con archivo OrdenesCompraPortalTEST.xlsx
+
+
+## Log de Integraciones
+
+- [x] Crear tabla `integration_logs` en drizzle/schema.ts con campos: id, clientId, url, requestBody, responseBody, token (parcial), authPrefix, status, createdAt
+- [x] Ejecutar migración de base de datos con pnpm db:push - Migración 0007_silent_adam_warlock.sql aplicada
+- [x] Crear helpers en server/db.ts: saveIntegrationLog, getIntegrationLogs (últimos 20), cleanOldLogs (mantener solo 20 más recientes)
+- [x] Crear endpoint tRPC `logs.getIntegrationLogs` que filtre por clientKey
+- [x] Modificar función callEgixiaApi en server/routers.ts para registrar logs automáticamente (excluir gettoken)
+- [x] Crear componente IntegrationLogsDialog.tsx con tabla de logs (URL, body, respuesta, token, estado, fecha)
+- [x] Agregar opción "Log de Integraciones" en el menú desplegable del header (engranaje)
+- [x] Mostrar token parcialmente enmascarado (primeros 10 caracteres + "...") - Implementado en saveIntegrationLog
+- [x] Ordenar logs por fecha descendente (más reciente primero) - Implementado en getIntegrationLogs
+- [x] Implementar auto-limpieza para mantener solo últimos 20 registros - Implementado en cleanOldIntegrationLogs

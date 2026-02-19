@@ -74,3 +74,21 @@ export const magicLinks = mysqlTable("magic_links", {
 
 export type MagicLink = typeof magicLinks.$inferSelect;
 export type InsertMagicLink = typeof magicLinks.$inferInsert;
+
+/**
+ * Integration logs - stores last 20 API calls (excluding gettoken)
+ */
+export const integrationLogs = mysqlTable("integration_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  clientId: int("clientId").notNull(), // foreign key to clients table
+  url: varchar("url", { length: 1024 }).notNull(),
+  requestBody: text("requestBody"), // JSON string of request body/params
+  responseBody: text("responseBody"), // JSON string of response
+  token: varchar("token", { length: 50 }), // Partial token (first 10 chars)
+  authPrefix: varchar("authPrefix", { length: 20 }).default("Bearer"), // e.g., "Bearer"
+  status: varchar("status", { length: 20 }).notNull(), // "success", "error", "timeout"
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type IntegrationLog = typeof integrationLogs.$inferSelect;
+export type InsertIntegrationLog = typeof integrationLogs.$inferInsert;
