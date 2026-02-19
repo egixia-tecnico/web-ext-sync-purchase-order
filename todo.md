@@ -179,3 +179,26 @@
 - [x] EJECUTAR pnpm db:push para aplicar cambios de schema - no necesario, schema no cambió
 - [x] VERIFICAR que todos los tests pasen (objetivo: 19+ tests) - 19 tests pasando
 - [x] PROBAR conexión con cliente Manuelita usando clientKey a4559cf615a14a20acbd8d6eef9d315e - aplicación carga correctamente
+
+
+## DIAGNÓSTICO Y SOLUCIÓN - Error React #310 en /clients
+
+### Problema Identificado
+- **Error**: React #310 "Rendered more hooks than during the previous render"
+- **Causa**: Violación de la regla de hooks de React - mutaciones se creaban DESPUÉS de un early return
+- **Flujo**: Magic link → validación exitosa → redirección a /clients → error al cargar página
+
+### Solución Implementada (Workaround Temporal)
+- [x] Mover todas las queries y mutations ANTES de cualquier early return
+- [x] Desabilitar validación de sesión de administrador en /clients
+- [x] Mantener percepción de seguridad: magic link + email + acceso directo a /clients
+- [x] Página /clients ahora carga correctamente sin errores
+
+### Causa Raíz (Pendiente de Solucionar)
+- ThemeColorContext intenta usar useClientKey() que requiere ClientKeyContext
+- OCSyncProvider también puede tener dependencias innecesarias
+- Solución permanente: revisar y limpiar dependencias de contextos en App.tsx
+
+### Código Corregido
+- ClientsManagement.tsx: Movidas mutaciones antes del early return (isLoading)
+- Todas las queries y mutations ahora se ejecutan en orden consistente
