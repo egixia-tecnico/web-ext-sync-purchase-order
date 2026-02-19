@@ -552,10 +552,10 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const tokenUrl = `${input.baseUrl.replace(/\/$/, "")}/apimanager/access/gettoken`;
         const requestBody = {
-          username: input.userName,
-          password: input.password,
-          client_id: input.clientId,
-          client_secret: input.clientSecret,
+          UserName: input.userName,
+          Password: input.password,
+          ClientId: input.clientId,
+          ClientSecret: input.clientSecret,
         };
         const requestHeaders = { "Content-Type": "application/json" };
         const MAX_RETRIES = 3;

@@ -1,0 +1,9 @@
+{
+  "query": "UPDATE clients SET isActive = true WHERE isActive = false OR isActive IS NULL;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3G7vsVf2Xrg4bKL.root --database iaCkpopGnAhaAjduGswQQS --execute UPDATE clients SET isActive = true WHERE isActive = false OR isActive IS NULL;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 100
+}
