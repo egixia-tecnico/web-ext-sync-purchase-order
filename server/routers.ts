@@ -582,7 +582,7 @@ export const appRouter = router({
 
             lastResponse = response;
 
-            if (response.data?.access_token) {
+            if (response.data?.AccessToken && response.data.AccessToken.trim()) {
               return {
                 success: true,
                 message: `Conexión exitosa en intento ${attempts}. Credenciales válidas.`,
