@@ -89,7 +89,7 @@ async function getToken(baseUrl: string, userName: string, password: string, cli
   try {
     const response = await axios.post(
       url,
-      { username: userName, password, client_id: clientId, client_secret: clientSecret },
+      { UserName: userName, Password: password, ClientId: clientId, ClientSecret: clientSecret },
       { headers: { "Content-Type": "application/json" }, timeout: 30000 }
     );
 
@@ -99,12 +99,12 @@ async function getToken(baseUrl: string, userName: string, password: string, cli
     }
 
     const data = response.data;
-    if (!data?.access_token) {
-      console.error("[Egixia] Token response missing access_token:", data);
-      throw new Error("Respuesta inválida del servidor (sin access_token)");
+    if (!data?.AccessToken || !data.AccessToken.trim()) {
+      console.error("[Egixia] Token response missing AccessToken:", data);
+      throw new Error("Respuesta inválida del servidor (sin AccessToken)");
     }
 
-    cachedToken = data.access_token;
+    cachedToken = data.AccessToken;
     const expiresIn = data.expires_in || 3600;
     tokenExpiry = now + expiresIn * 1000 - 60000;
 
