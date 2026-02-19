@@ -222,3 +222,19 @@
 - [x] Integrar diálogo en ClientDialog al hacer clic en "Probar conexión" - Integrado en ClientDialog.tsx
 - [x] Mostrar método HTTP, URL completa, estructura del body y respuesta del servicio - Implementado en TestConnectionDebugDialog
 - [x] Permitir copiar la información para validación manual en Postman/SoapUI - Botones de copiar agregados para cada sección
+
+
+## Mejora de Resiliencia en testConnection
+
+- [ ] Aumentar timeout a 60 segundos (AXIOS_TIMEOUT_MS = 60000)
+- [ ] Implementar reintentos con backoff exponencial (máx 3 intentos)
+- [ ] Mostrar progreso de reintentos en el diálogo de debug
+- [ ] Probar con cliente Manuelita para validar que funciona correctamente
+
+## Mejora de Resiliencia en testConnection - COMPLETADO
+
+- [x] Aumentar timeout a 60 segundos (de 30s a 60s) - TIMEOUT_MS = 60000
+- [x] Implementar reintentos con backoff exponencial (máx 3 intentos) - Loop con Math.pow(2, attempt) * 1000
+- [x] Mostrar número de intento en mensaje de respuesta - Incluido en debug.attempts y debug.totalAttempts
+- [x] Agregar logs de debug para cada intento - console.log para cada intento y error
+- [x] Romper reintentos si error es 4xx (no timeout) - Validación de error.response?.status >= 400 && < 500

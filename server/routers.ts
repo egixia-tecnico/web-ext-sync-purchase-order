@@ -551,80 +551,87 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         const tokenUrl = `${input.baseUrl.replace(/\/$/, "")}/apimanager/access/gettoken`;
-        try {
-          console.log("[Clients testConnection] Intentando conexion a:", tokenUrl);
-          const response = await axios.post(
-            tokenUrl,
-            {
-              username: input.userName,
-              password: input.password,
-              client_id: input.clientId,
-              client_secret: input.clientSecret,
-            },
-            {
-              headers: { "Content-Type": "application/json" },
-              timeout: AXIOS_TIMEOUT_MS,
-            }
-          );
+        const requestBody = {
+          username: input.userName,
+          password: input.password,
+          client_id: input.clientId,
+          client_secret: input.clientSecret,
+        };
+        const requestHeaders = { "Content-Type": "application/json" };
+        const MAX_RETRIES = 3;
+        const TIMEOUT_MS = 60000;
+        let lastError: any = null;
+        let lastResponse: any = null;
+        let attempts = 0;
 
-          const requestBody = {
-            username: input.userName,
-            password: input.password,
-            client_id: input.clientId,
-            client_secret: input.clientSecret,
-          };
+        for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+          attempts = attempt + 1;
+          const delayMs = Math.pow(2, attempt) * 1000;
 
-          if (response.data?.access_token) {
-            return {
-              success: true,
-              message: "Conexión exitosa. Credenciales válidas.",
-              debug: {
-                method: "POST",
-                url: tokenUrl,
-                requestHeaders: { "Content-Type": "application/json" },
-                requestBody,
-                responseStatus: response.status,
-                responseData: response.data,
-              },
-            };
-          } else {
-            return {
-              success: false,
-              message: "Respuesta inválida del servidor. No se recibió token de acceso.",
-              debug: {
-                method: "POST",
-                url: tokenUrl,
-                requestHeaders: { "Content-Type": "application/json" },
-                requestBody,
-                responseStatus: response.status,
-                responseData: response.data,
-              },
-            };
+          if (attempt > 0) {
+            console.log(`[Clients testConnection] Reintento ${attempt}/${MAX_RETRIES - 1}, esperando ${delayMs}ms`);
+            await new Promise(resolve => setTimeout(resolve, delayMs));
           }
-        } catch (error: any) {
-          const requestBody = {
-            username: input.userName,
-            password: input.password,
-            client_id: input.clientId,
-            client_secret: input.clientSecret,
-          };
-          console.error("[Clients testConnection] Error:", error.message);
-          console.error("[Clients testConnection] Status:", error.response?.status);
-          console.error("[Clients testConnection] Data:", error.response?.data);
-          return {
-            success: false,
-            message: error.response?.data?.message || error.message || "Error al conectar con el servidor",
-            debug: {
-              method: "POST",
-              url: tokenUrl,
-              requestHeaders: { "Content-Type": "application/json" },
-              requestBody,
-              responseStatus: error.response?.status,
-              responseData: error.response?.data,
-              errorMessage: error.message,
-            },
-          };
+
+          try {
+            console.log(`[Clients testConnection] Intento ${attempts}/${MAX_RETRIES} a:`, tokenUrl);
+            const response = await axios.post(tokenUrl, requestBody, {
+              headers: requestHeaders,
+              timeout: TIMEOUT_MS,
+            });
+
+            lastResponse = response;
+
+            if (response.data?.access_token) {
+              return {
+                success: true,
+                message: `Conexión exitosa en intento ${attempts}. Credenciales válidas.`,
+                debug: {
+                  method: "POST",
+                  url: tokenUrl,
+                  requestHeaders,
+                  requestBody,
+                  responseStatus: response.status,
+                  responseData: response.data,
+                  attempts,
+                  totalAttempts: MAX_RETRIES,
+                },
+              };
+            } else {
+              lastError = new Error("Respuesta inválida del servidor. No se recibió token de acceso.");
+              continue;
+            }
+          } catch (error: any) {
+            lastError = error;
+            console.error(`[Clients testConnection] Error en intento ${attempts}:`, error.message);
+            console.error("[Clients testConnection] Status:", error.response?.status);
+            console.error("[Clients testConnection] Data:", error.response?.data);
+
+            if (error.response?.status && error.response.status >= 400 && error.response.status < 500 && error.code !== 'ECONNABORTED') {
+              break;
+            }
+
+            if (attempt < MAX_RETRIES - 1) {
+              continue;
+            }
+          }
         }
+
+        return {
+          success: false,
+          message: lastError?.response?.data?.message || lastError?.message || "Error al conectar con el servidor después de múltiples intentos",
+          debug: {
+            method: "POST",
+            url: tokenUrl,
+            requestHeaders,
+            requestBody,
+            responseStatus: lastError?.response?.status || lastResponse?.status,
+            responseData: lastError?.response?.data || lastResponse?.data,
+            errorMessage: lastError?.message,
+            attempts,
+            totalAttempts: MAX_RETRIES,
+          },
+        };
       }),
   }),
 });
