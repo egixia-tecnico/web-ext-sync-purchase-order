@@ -544,7 +544,11 @@ export const appRouter = router({
           );
 
           let errorMessage = null;
-          if (seguimiento.SinProveedor > 0) {
+          
+          // Check for "Not found Buyer." message (status 400)
+          if (data.message && data.message.includes("Not found Buyer")) {
+            errorMessage = "No existe la empresa compradora, verifique que el número contenga incluso los ceros a la izquierda en caso que aplique";
+          } else if (seguimiento.SinProveedor > 0) {
             errorMessage = "La orden de compra trae el campo proveedor nulo";
           } else if (seguimiento.ProveedorNoExiste > 0) {
             errorMessage = "El proveedor no existe en el portal";

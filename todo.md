@@ -376,3 +376,8 @@
 - [x] CORRECCIÓN: Estado "supplier_not_exists" también puede sincronizarse (no solo "not_found") - Actualizado color a amarillo y etiqueta a "Proveedor no registrado"
 - [x] Actualizar lógica de selección en step Sincronizar para incluir ambos estados (synchronizeBatch filtra solo por status !== "synced")
 - [x] Actualizar mensajes de ayuda para reflejar que ambos estados pueden sincronizarse
+
+## Manejo de Error "Not found Buyer." en Sincronización
+- [x] Agregar detección de mensaje "Not found Buyer." en synchronizePurchaseOrder
+- [x] Mostrar mensaje descriptivo: "No existe la empresa compradora, verifique que el número contenga incluso los ceros a la izquierda en caso que aplique"
+- [x] Marcar como error cuando TotalOCs=0 y message contiene "Not found Buyer"
