@@ -268,4 +268,5 @@
 
 - [x] Modificar endpoint verifyPurchaseOrders para enviar solo `buyer_external_code` y `purchase_order_number`
 - [x] Eliminar parámetro `SupplierCode` de la petición a `getpurchaseorder`
+- [x] Corregir endpoint de `/apimanager/purchaseorder/getpurchaseorder` a `/apimanager/purchase_order_v1/list`
 - [ ] Probar flujo completo con archivo OrdenesCompraPortalTEST.xlsx
