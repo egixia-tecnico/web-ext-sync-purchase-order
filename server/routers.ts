@@ -334,7 +334,7 @@ export const appRouter = router({
                 input.clientKey
               );
 
-              if (supplierExists && supplierExists.length > 0 && supplierExists[0]?.exists) {
+              if (supplierExists?.outlist_provider && supplierExists.outlist_provider.length > 0 && supplierExists.outlist_provider[0]?.provider_exists === true) {
                 results.push({
                   purchaseOrderId: order.purchaseOrderId,
                   providerExternalCode1: order.providerExternalCode1,
@@ -422,7 +422,7 @@ export const appRouter = router({
           }],
           input.clientKey
         );
-        return { exists: (data && data.length > 0 && data[0]?.exists) || false };
+        return { exists: (data?.outlist_provider && data.outlist_provider.length > 0 && data.outlist_provider[0]?.provider_exists === true) || false };
       }),
 
     getVerificationHistory: publicProcedure

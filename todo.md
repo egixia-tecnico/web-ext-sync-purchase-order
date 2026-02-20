@@ -301,3 +301,11 @@
 - [x] Actualizar componentes frontend (DataUploader, ResultsTable) para mostrar ambos campos
 - [ ] Probar flujo completo con archivo Excel actualizado
 
+
+## Corrección de Lógica de Validación de Proveedor - COMPLETADO
+
+- [x] Corregir lógica en validación de proveedor para acceder a `outlist_provider` en lugar de array directo
+- [x] Validar que `provider_exists === true` (no solo `exists`)
+- [x] Primera validación (línea 337): `supplierExists?.outlist_provider[0]?.provider_exists === true`
+- [x] Segunda validación (línea 425): `data?.outlist_provider[0]?.provider_exists === true`
+- [x] Tests pasando (19/19)
