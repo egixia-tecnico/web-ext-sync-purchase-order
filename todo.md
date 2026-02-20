@@ -262,3 +262,10 @@
 - [x] Mostrar token parcialmente enmascarado (primeros 10 caracteres + "...") - Implementado en saveIntegrationLog
 - [x] Ordenar logs por fecha descendente (más reciente primero) - Implementado en getIntegrationLogs
 - [x] Implementar auto-limpieza para mantener solo últimos 20 registros - Implementado en cleanOldIntegrationLogs
+
+
+## Ajuste de Parámetros en getPurchaseOrder
+
+- [x] Modificar endpoint verifyPurchaseOrders para enviar solo `buyer_external_code` y `purchase_order_number`
+- [x] Eliminar parámetro `SupplierCode` de la petición a `getpurchaseorder`
+- [ ] Probar flujo completo con archivo OrdenesCompraPortalTEST.xlsx

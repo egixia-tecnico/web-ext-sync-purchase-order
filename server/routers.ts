@@ -306,7 +306,7 @@ export const appRouter = router({
         for (const order of input.orders) {
           try {
             const data = await callEgixiaApi(
-              `/apimanager/purchaseorder/getpurchaseorder?PurchaseOrderId=${order.purchaseOrderId}&SupplierCode=${order.supplierCode}`,
+              `/apimanager/purchaseorder/getpurchaseorder?buyer_external_code=${order.buyerCode}&purchase_order_number=${order.purchaseOrderId}`,
               "GET",
               undefined,
               input.clientKey
