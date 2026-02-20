@@ -2,8 +2,8 @@
  * ActionBar - Barra de acciones contextual por step
  * Step 2 (Verificar): Botón "Verificar pendientes" → al completar avanza a Step 3
  * Step 3 (Resultados): "Exportar" + "Sincronizar X de Y" → al clic pasa a Step 4 y ejecuta automáticamente
- * Step 4 (Sincronizar): Progreso automático de sincronización → al completar pasa a Step 5
- * Step 5 (Exportar): Grid actualizado con "Exportar resultados", sin opción de re-sincronizar
+ * Step 4 (Sincronizar): Progreso automático de sincronización REAL → al completar pasa a Step 5
+ * Step 5 (Finalizado): Grid actualizado con "Exportar resultados", sin opción de re-sincronizar
  */
 import { useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -25,7 +25,7 @@ export default function ActionBar() {
     selectedRecords, selectAll, deselectAll, selectNonSynced, selectMultipleStatuses,
     currentStep, setCurrentStep, goToNextStep, goToPrevStep,
   } = useOCSync();
-  const { verifyBatch } = useOCVerification();
+  const { verifyBatch, synchronizeBatch } = useOCVerification();
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
   const hasAutoSelectedForStep3 = useRef(false);
@@ -105,10 +105,10 @@ export default function ActionBar() {
       return;
     }
 
-    await verifyBatch(toSync);
-    toast.success(`Sincronización completada para ${toSync.length} registros`, { position: "top-center" });
+    // Execute real synchronization
+    await synchronizeBatch(toSync);
 
-    // After sync, advance to step 5 (Exportar) with updated grid
+    // After sync, advance to step 5 (Finalizado) with updated grid
     setCurrentStep(5);
   };
 
@@ -232,7 +232,7 @@ export default function ActionBar() {
         </div>
       )}
 
-      {/* Step 5: Exportar (final) - grid actualizado, sin opción de re-sincronizar */}
+      {/* Step 5: Finalizado - grid actualizado con resultados finales, sin opción de re-sincronizar */}
       {currentStep === 5 && (
         <div className="flex flex-wrap items-center gap-3">
           <Button

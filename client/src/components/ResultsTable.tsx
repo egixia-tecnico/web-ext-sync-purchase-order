@@ -50,10 +50,10 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: str
     icon: <XCircle className="w-3.5 h-3.5" />,
   },
   supplier_not_exists: {
-    label: "Proveedor no existe",
-    color: "text-red-600",
-    bgColor: "bg-red-50",
-    borderColor: "#ef4444",
+    label: "Proveedor no registrado",
+    color: "text-amber-600",
+    bgColor: "bg-amber-50",
+    borderColor: "#f59e0b",
     icon: <UserX className="w-3.5 h-3.5" />,
   },
   error: {

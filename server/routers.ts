@@ -118,14 +118,14 @@ async function getToken(baseUrl: string, userName: string, password: string, cli
   }
 }
 
-async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", body?: any, clientKey?: string): Promise<any> {
+async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", body?: any, clientKey?: string, retryOn401 = true): Promise<any> {
   const credentials = await getClientCredentials(clientKey);
   if (!credentials) {
     throw new Error("No hay configuración de API disponible. Configure un cliente primero.");
   }
 
   const { baseUrl, userName, password, clientId, clientSecret } = credentials;
-  const token = await getToken(baseUrl, userName, password, clientId, clientSecret);
+  let token = await getToken(baseUrl, userName, password, clientId, clientSecret);
   const cleanBaseUrl = baseUrl.replace(/\/$/, "");
   const url = `${cleanBaseUrl}${endpoint}`;
 
@@ -153,9 +153,28 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
     responseData = response.data;
     return response.data;
   } catch (err: any) {
+    const httpStatus = err.response?.status;
+    
+    // Handle 401 Unauthorized - token expired, retry once with new token
+    if (httpStatus === 401 && retryOn401) {
+      console.log(`[Egixia] 401 Unauthorized, refreshing token and retrying...`);
+      cachedToken = null; // Clear cached token
+      tokenExpiry = 0;
+      token = await getToken(baseUrl, userName, password, clientId, clientSecret);
+      return await callEgixiaApi(endpoint, method, body, clientKey, false); // Retry once without further 401 retries
+    }
+    
+    // Handle 403 Forbidden - insufficient permissions
+    if (httpStatus === 403) {
+      const serviceName = endpoint.split('/').pop() || endpoint;
+      status = "error";
+      responseData = { error: "Forbidden", status: 403 };
+      throw new Error(`Hacen falta permisos para ejecutar el servicio ${serviceName}`);
+    }
+    
     console.error(`[Egixia] API call failed:`, err.message);
     status = err.code === 'ECONNABORTED' ? "timeout" : "error";
-    responseData = { error: err.message, code: err.code };
+    responseData = { error: err.message, code: err.code, status: httpStatus };
     throw new Error(`Error en llamada a API: ${err.message}`);
   } finally {
     // Save integration log (exclude gettoken endpoint)
@@ -328,11 +347,17 @@ export const appRouter = router({
                   purchaseOrderId: order.purchaseOrderId,
                   providerExternalCode1: order.providerExternalCode1,
                   providerExternalCode2: order.providerExternalCode2 || "",
+                  providerExternalCode3: orderData.provider_external_code3 || "",
                   buyerCode: order.buyerCode,
+                  buyerName: orderData.buyer_name || null,
+                  providerName: orderData.provider_name || null,
                   status: "found", // Order is synchronized
                   syncStatus: "synchronized",
                   documentDate: orderData.document_date || null,
                   synchronizationDate: orderData.synchronization_date || null,
+                  deliveryStatus: orderData.delivery_status || null,
+                  canceled: orderData.canceled || null,
+                  updated: orderData.updated || null,
                 });
               } else {
                 // Response has data but no exact match - treat as not found
@@ -348,7 +373,18 @@ export const appRouter = router({
                   input.clientKey
                 );
 
-                if (supplierExists?.outlist_provider && supplierExists.outlist_provider.length > 0 && supplierExists.outlist_provider[0]?.provider_exists === true) {
+                if (!supplierExists?.outlist_provider || supplierExists.outlist_provider.length === 0) {
+                  // Invalid response from supplier_exists endpoint
+                  results.push({
+                    purchaseOrderId: order.purchaseOrderId,
+                    providerExternalCode1: order.providerExternalCode1,
+                    providerExternalCode2: order.providerExternalCode2 || "",
+                    buyerCode: order.buyerCode,
+                    status: "error",
+                    syncStatus: null,
+                    error: "Respuesta inválida del servicio de verificación de proveedor",
+                  });
+                } else if (supplierExists.outlist_provider[0]?.provider_exists === true) {
                   results.push({
                     purchaseOrderId: order.purchaseOrderId,
                     providerExternalCode1: order.providerExternalCode1,
@@ -381,7 +417,18 @@ export const appRouter = router({
                 input.clientKey
               );
 
-              if (supplierExists?.outlist_provider && supplierExists.outlist_provider.length > 0 && supplierExists.outlist_provider[0]?.provider_exists === true) {
+              if (!supplierExists?.outlist_provider || supplierExists.outlist_provider.length === 0) {
+                // Invalid response from supplier_exists endpoint
+                results.push({
+                  purchaseOrderId: order.purchaseOrderId,
+                  providerExternalCode1: order.providerExternalCode1,
+                  providerExternalCode2: order.providerExternalCode2 || "",
+                  buyerCode: order.buyerCode,
+                  status: "error",
+                  syncStatus: null,
+                  error: "Respuesta inválida del servicio de verificación de proveedor",
+                });
+              } else if (supplierExists.outlist_provider[0]?.provider_exists === true) {
                 results.push({
                   purchaseOrderId: order.purchaseOrderId,
                   providerExternalCode1: order.providerExternalCode1,
@@ -451,6 +498,77 @@ export const appRouter = router({
             syncRules: credentials.syncRules,
           } : null,
         };
+      }),
+
+    synchronizePurchaseOrder: publicProcedure
+      .input(z.object({
+        buyerExternalCode: z.string(),
+        purchaseOrderNumber: z.string(),
+        sendEmails: z.boolean().default(false),
+        clientKey: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        try {
+          const data = await callEgixiaApi(
+            `/apimanager/purchase_order_v1/synchronize_purchase_order`,
+            "POST",
+            {
+              buyer_external_code: input.buyerExternalCode,
+              purchase_order_number: input.purchaseOrderNumber,
+              send_emails: input.sendEmails,
+            },
+            input.clientKey
+          );
+
+          // Analyze SDTSeguimineto to determine success
+          const seguimiento = data?.SDTSeguimineto;
+          
+          if (!seguimiento) {
+            return {
+              success: false,
+              error: "Respuesta inválida del servidor (sin SDTSeguimineto)",
+              data: null,
+            };
+          }
+
+          // Success: Actualizadas > 0 OR Creadas > 0
+          const isSuccess = (seguimiento.Actualizadas > 0 || seguimiento.Creadas > 0);
+          
+          // Errors: ProveedorNoExiste, CompradorNoExiste, TotalOCs=0, AnuladasNoRegistradas
+          const hasError = (
+            seguimiento.ProveedorNoExiste > 0 ||
+            seguimiento.CompradorNoExiste > 0 ||
+            seguimiento.TotalOCs === 0 ||
+            seguimiento.AnuladasNoRegistradas > 0 ||
+            seguimiento.SinProveedor > 0
+          );
+
+          let errorMessage = null;
+          if (seguimiento.SinProveedor > 0) {
+            errorMessage = "La orden de compra trae el campo proveedor nulo";
+          } else if (seguimiento.ProveedorNoExiste > 0) {
+            errorMessage = "El proveedor no existe en el portal";
+          } else if (seguimiento.CompradorNoExiste > 0) {
+            errorMessage = "La empresa compradora no está configurada en la integración o no existe";
+          } else if (seguimiento.AnuladasNoRegistradas > 0) {
+            errorMessage = "La orden de compra está 100% anulada y no existía previamente en el portal";
+          } else if (seguimiento.TotalOCs === 0) {
+            errorMessage = "No se encontró la orden de compra en el sistema origen";
+          }
+
+          return {
+            success: isSuccess && !hasError,
+            message: data.message || null,
+            errorMessage,
+            data: seguimiento,
+          };
+        } catch (error: any) {
+          return {
+            success: false,
+            error: error.message,
+            data: null,
+          };
+        }
       }),
 
     checkSupplier: publicProcedure

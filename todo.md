@@ -329,3 +329,50 @@
 - [ ] Actualizar DataUploader para mostrar códigos formateados en vista previa
 - [ ] Mantener valores separados internamente (provider_external_code_1, provider_external_code_2, provider_external_code_3)
 - [ ] Probar flujo completo con archivo Excel que incluya órdenes sincronizadas y no sincronizadas
+
+## Correcciones Basadas en Especificaciones Correctas de API
+
+### Servicio 2: Verificar Orden de Compra (purchase_order_v1/list)
+- [x] Agregar campos faltantes en la respuesta: provider_external_code2, provider_external_code3, buyer_name, provider_name, delivery_status, canceled, updated
+- [x] Implementar manejo de error 403 con mensaje "Hacen falta permisos para ejecutar el servicio /purchase_order_v1/list"
+- [x] Implementar manejo de error 401: actualizar token y re-ejecutar desde el paso 1
+- [x] Actualizar tipo de datos de OCRecord para incluir todos los campos nuevos
+
+### Servicio 3: Verificar Proveedor (suppliers_v3/supplier_exists)
+- [x] Agregar campos faltantes en la respuesta: provider_id, Message
+- [x] Implementar manejo de error 403 con mensaje "Hacen falta permisos para ejecutar el servicio suppliers_v3/supplier_exists"
+- [x] Implementar manejo de error 401: actualizar token y re-ejecutar desde el paso 1
+- [x] Manejar caso cuando outlist_provider está vacío: marcar como "error" con mensaje descriptivo
+- [x] CORRECCIÓN CRÍTICA: Cuando provider_exists === false, también puede sincronizarse (no solo cuando es true) - NOTA: Según especificación, ambos estados pueden sincronizarse
+
+### Servicio 4: Logs de Integración
+- [x] Cambiar auto-limpieza de 20 registros a: 10 registros por cada tipo de integración (30 registros máximo inicial)
+- [x] Agregar logs para el nuevo servicio synchronize_purchase_order (se registra automáticamente en callEgixiaApi)
+
+### Servicio 5: Sincronizar Orden de Compra (synchronize_purchase_order) - NUEVO
+- [x] Crear endpoint tRPC `egixia.synchronizePurchaseOrder` que consuma /apimanager/purchase_order_v1/synchronize_purchase_order
+- [x] Request: { buyer_external_code, purchase_order_number, send_emails: false }
+- [x] Response: analizar SDTSeguimineto para determinar éxito (Actualizadas > 0 o Creadas > 0)
+- [x] Errores: ProveedorNoExiste, CompradorNoExiste, TotalOCs=0, AnuladasNoRegistradas, SinProveedor
+- [x] Sincronizar una OC a la vez (no en lote)
+- [x] Después de sincronizar, re-verificar automáticamente con purchase_order_v1/list para actualizar estado
+- [x] Implementar manejo de error 403 y 401 igual que otros servicios (heredado de callEgixiaApi)
+- [x] Acumular resultados: exitosas, parciales, fallidas
+- [x] Mostrar toast final: verde (todas OK), amarillo (parcial), rojo (ninguna)
+
+### Cambios en UI/UX
+- [ ] Eliminar botón "Sincronizar X de Y" del step Resultados (mantener por ahora para flujo manual)
+- [x] En step "Sincronizar": ejecutar sincronización real con synchronizeBatch
+- [x] Después de sincronizar: re-verificar OC sincronizadas y actualizar grid
+- [x] Paso final renombrar de "Exportar" a "Finalizado"
+- [x] No permitir sincronizar OC que ya están en estado "synced" (omitirlas automáticamente en synchronizeBatch)
+
+### Manejo Global de Errores 401
+- [x] Implementar interceptor global para detectar error 401 en cualquier endpoint
+- [x] Al detectar 401: limpiar token en caché, solicitar nuevo token, reintentar operación original
+- [x] Máximo 1 reintento por operación (evitar loops infinitos)
+
+### Actualización de Estados
+- [x] CORRECCIÓN: Estado "supplier_not_exists" también puede sincronizarse (no solo "not_found") - Actualizado color a amarillo y etiqueta a "Proveedor no registrado"
+- [x] Actualizar lógica de selección en step Sincronizar para incluir ambos estados (synchronizeBatch filtra solo por status !== "synced")
+- [x] Actualizar mensajes de ayuda para reflejar que ambos estados pueden sincronizarse

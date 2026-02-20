@@ -258,7 +258,7 @@ export async function saveIntegrationLog(data: {
       status: data.status,
     });
 
-    // Clean old logs - keep only last 20
+    // Clean old logs - keep only last 10 per integration type (30 total max)
     await cleanOldIntegrationLogs(data.clientId);
     
     return true;
@@ -288,14 +288,44 @@ async function cleanOldIntegrationLogs(clientId: number) {
 
   // Get all logs for this client, ordered by date desc
   const allLogs = await db
-    .select({ id: integrationLogs.id })
+    .select({ id: integrationLogs.id, url: integrationLogs.url, createdAt: integrationLogs.createdAt })
     .from(integrationLogs)
     .where(eq(integrationLogs.clientId, clientId))
     .orderBy(desc(integrationLogs.createdAt));
 
-  // If more than 20, delete the oldest ones
-  if (allLogs.length > 20) {
-    const idsToDelete = allLogs.slice(20).map(log => log.id);
+  // Group logs by integration type (extract service name from URL)
+  const logsByType: Record<string, typeof allLogs> = {};
+  for (const log of allLogs) {
+    const serviceName = extractServiceName(log.url);
+    if (!logsByType[serviceName]) {
+      logsByType[serviceName] = [];
+    }
+    logsByType[serviceName].push(log);
+  }
+
+  // Keep only last 10 per type
+  const idsToDelete: number[] = [];
+  for (const [serviceName, logs] of Object.entries(logsByType)) {
+    if (logs.length > 10) {
+      const toDelete = logs.slice(10).map(log => log.id);
+      idsToDelete.push(...toDelete);
+    }
+  }
+
+  if (idsToDelete.length > 0) {
     await db.delete(integrationLogs).where(inArray(integrationLogs.id, idsToDelete));
   }
+}
+
+function extractServiceName(url: string): string {
+  // Extract service name from URL
+  // Examples:
+  // /apimanager/purchase_order_v1/list -> purchase_order_v1_list
+  // /ApiManager/suppliers_v3/supplier_exists -> suppliers_v3_supplier_exists
+  // /apimanager/purchase_order_v1/synchronize_purchase_order -> purchase_order_v1_synchronize
+  const match = url.match(/\/(apimanager|ApiManager)\/([^\/]+)\/([^\/\?]+)/);
+  if (match) {
+    return `${match[2]}_${match[3]}`;
+  }
+  return "unknown";
 }

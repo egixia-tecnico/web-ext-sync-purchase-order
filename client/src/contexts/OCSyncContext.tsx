@@ -9,15 +9,22 @@ import { createContext, useContext, useState, useCallback, type ReactNode } from
 export interface OCRecord {
   id: string;
   buyer_external_code: string;
+  buyer_name?: string;
   provider_external_code: string; // Deprecated - usar provider_external_code_1
   provider_external_code_1?: string;
   provider_external_code_2?: string;
+  provider_external_code_3?: string;
+  provider_name?: string;
   purchase_order_number: string;
+  document_date?: string;
+  delivery_status?: string;
+  canceled?: string;
+  updated?: string;
+  synchronization_date?: string;
   status?: "pending" | "checking" | "synced" | "not_found" | "supplier_not_exists" | "error" | "synced_with_error";
   statusMessage?: string;
-  buyer_name?: string;
-  provider_name?: string;
   provider_exists?: boolean;
+  provider_id?: string;
   portalData?: {
     buyerName: string;
     providerCode: string;

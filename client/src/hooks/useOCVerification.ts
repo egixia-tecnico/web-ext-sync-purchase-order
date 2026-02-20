@@ -104,5 +104,74 @@ export function useOCVerification() {
     }
   }, [records, selectedRecords, updateRecordsBatch, setIsProcessing, setProgress, verifyBatchMutation, clientKey]);
 
-  return { verifyBatch };
+  const synchronizeMutation = trpc.egixia.synchronizePurchaseOrder.useMutation();
+
+  const synchronizeBatch = useCallback(async (recordsToSync?: OCRecord[]) => {
+    // Use selected records if no specific records provided
+    const targets = recordsToSync || records.filter(r => selectedRecords.has(r.id));
+    
+    // Filter out already synced records
+    const toSync = targets.filter(r => r.status !== "synced");
+    
+    if (toSync.length === 0) {
+      toast.warning("No hay registros pendientes de sincronización", { position: "top-center" });
+      return { success: 0, failed: 0, skipped: targets.length - toSync.length };
+    }
+
+    setIsProcessing(true);
+    setProgress({ current: 0, total: toSync.length });
+
+    let successCount = 0;
+    let failedCount = 0;
+
+    // Synchronize one by one (API doesn't support batch)
+    for (let i = 0; i < toSync.length; i++) {
+      const record = toSync[i];
+      setProgress({ current: i + 1, total: toSync.length });
+
+      try {
+        const result = await synchronizeMutation.mutateAsync({
+          buyerExternalCode: record.buyer_external_code,
+          purchaseOrderNumber: record.purchase_order_number,
+          sendEmails: false,
+          clientKey: clientKey || undefined,
+        });
+
+        if (result.success) {
+          successCount++;
+        } else {
+          failedCount++;
+          updateRecord(record.id, {
+            statusMessage: result.errorMessage || result.error || "Error al sincronizar",
+          });
+        }
+      } catch (err: any) {
+        failedCount++;
+        updateRecord(record.id, {
+          statusMessage: err?.message || "Error al sincronizar",
+        });
+      }
+    }
+
+    // Re-verify synchronized orders to update their status
+    if (successCount > 0) {
+      await verifyBatch(toSync.filter((_, i) => i < successCount));
+    }
+
+    setIsProcessing(false);
+
+    // Show summary toast
+    const total = toSync.length;
+    if (successCount === total) {
+      toast.success(`${successCount} de ${total} órdenes sincronizadas correctamente`, { position: "top-center", duration: 5000 });
+    } else if (successCount > 0) {
+      toast.warning(`${successCount} de ${total} órdenes sincronizadas correctamente`, { position: "top-center", duration: 5000 });
+    } else {
+      toast.error(`0 de ${total} órdenes sincronizadas`, { position: "top-center", duration: 5000 });
+    }
+
+    return { success: successCount, failed: failedCount, skipped: targets.length - toSync.length };
+  }, [records, selectedRecords, updateRecord, updateRecordsBatch, setIsProcessing, setProgress, synchronizeMutation, verifyBatch, clientKey]);
+
+  return { verifyBatch, synchronizeBatch };
 }

@@ -13,7 +13,7 @@ const STEPS = [
   { id: 2 as WorkflowStep, label: "Verificar", icon: Search },
   { id: 3 as WorkflowStep, label: "Resultados", icon: BarChart3 },
   { id: 4 as WorkflowStep, label: "Sincronizar", icon: RefreshCw },
-  { id: 5 as WorkflowStep, label: "Exportar", icon: Download },
+  { id: 5 as WorkflowStep, label: "Finalizado", icon: Check },
 ];
 
 export default function WorkflowStepper() {
