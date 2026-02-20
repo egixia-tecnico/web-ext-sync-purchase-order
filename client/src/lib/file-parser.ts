@@ -13,6 +13,17 @@ const BUYER_COLUMNS = [
   "empresa_compradora", "codigo_erp_comprador", "cod_erp_comprador",
 ];
 
+const PROVIDER_COLUMNS_1 = [
+  "provider_external_code_1", "codigo_proveedor_1", "cod_proveedor_1",
+  "provider_code_1", "codigo_erp_proveedor_1", "cod_erp_proveedor_1",
+];
+
+const PROVIDER_COLUMNS_2 = [
+  "provider_external_code_2", "codigo_proveedor_2", "cod_proveedor_2",
+  "provider_code_2", "codigo_erp_proveedor_2", "cod_erp_proveedor_2",
+];
+
+// Deprecated - mantener para compatibilidad con archivos antiguos
 const PROVIDER_COLUMNS = [
   "provider_external_code", "codigo_proveedor", "cod_proveedor", "proveedor",
   "provider_code", "provider", "codigo_erp_proveedor", "cod_erp_proveedor",
@@ -64,7 +75,9 @@ export function parseFileData(file: File): Promise<OCRecord[]> {
 
         const headers = jsonData[0].map(String);
         const buyerCol = findColumn(headers, BUYER_COLUMNS);
-        const providerCol = findColumn(headers, PROVIDER_COLUMNS);
+        const providerCol1 = findColumn(headers, PROVIDER_COLUMNS_1);
+        const providerCol2 = findColumn(headers, PROVIDER_COLUMNS_2);
+        const providerColLegacy = findColumn(headers, PROVIDER_COLUMNS);
         const ocCol = findColumn(headers, OC_COLUMNS);
 
         if (ocCol === -1) {
@@ -90,7 +103,8 @@ export function parseFileData(file: File): Promise<OCRecord[]> {
 
           const ocNumber = String(row[ocCol] || "").trim();
           const buyerCode = String(row[buyerCol] || "").trim();
-          const providerCode = providerCol !== -1 ? String(row[providerCol] || "").trim() : "";
+          const providerCode1 = providerCol1 !== -1 ? String(row[providerCol1] || "").trim() : (providerColLegacy !== -1 ? String(row[providerColLegacy] || "").trim() : "");
+          const providerCode2 = providerCol2 !== -1 ? String(row[providerCol2] || "").trim() : "";
 
           if (!ocNumber || !buyerCode) continue;
 
@@ -98,7 +112,9 @@ export function parseFileData(file: File): Promise<OCRecord[]> {
           records.push({
             id: `oc-${idCounter}-${Date.now()}`,
             buyer_external_code: buyerCode,
-            provider_external_code: providerCode,
+            provider_external_code: providerCode1, // Deprecated - mantener para compatibilidad
+            provider_external_code_1: providerCode1,
+            provider_external_code_2: providerCode2,
             purchase_order_number: ocNumber,
             status: "pending",
           });
@@ -235,22 +251,23 @@ export function downloadTemplate() {
   // --- Hoja 1: Plantilla de datos ---
   const templateHeaders = [
     "buyer_external_code",
-    "provider_external_code",
+    "provider_external_code_1",
+    "provider_external_code_2",
     "purchase_order_number",
   ];
 
   const exampleRows = [
-    ["0100", "1222748", "3300293553"],
-    ["0100", "1221267", "3300293554"],
-    ["0230", "5001234", "4500012345"],
-    ["0400", "9087654", "7700056789"],
+    ["0100", "1222748", "", "3300293553"],
+    ["0100", "1221267", "", "3300293554"],
+    ["0230", "", "5001234", "4500012345"],
+    ["0400", "9087654", "", "7700056789"],
   ];
 
   const templateData = [templateHeaders, ...exampleRows];
   const wsData = XLSX.utils.aoa_to_sheet(templateData);
 
   // Forzar TODAS las celdas a formato texto (@) para preservar ceros a la izquierda
-  const range = XLSX.utils.decode_range(wsData["!ref"] || "A1:C5");
+  const range = XLSX.utils.decode_range(wsData["!ref"] || "A1:D5");
   for (let R = range.s.r; R <= range.e.r; R++) {
     for (let C = range.s.c; C <= range.e.c; C++) {
       const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
@@ -264,6 +281,7 @@ export function downloadTemplate() {
   // Ancho de columnas
   wsData["!cols"] = [
     { wch: 22 },
+    { wch: 24 },
     { wch: 24 },
     { wch: 24 },
   ];
@@ -282,22 +300,24 @@ export function downloadTemplate() {
     [""],
     ["Columna", "Descripción", "Obligatorio", "Ejemplo"],
     ["buyer_external_code", "Código ERP de la empresa compradora", "Sí", "0100"],
-    ["provider_external_code", "Código ERP del proveedor", "No (recomendado)", "1222748"],
+    ["provider_external_code_1", "Código ERP del proveedor (principal)", "No (recomendado)", "1222748"],
+    ["provider_external_code_2", "Código ERP del proveedor (alternativo)", "No", "5001234"],
     ["purchase_order_number", "Número de la orden de compra", "Sí", "3300293553"],
     [""],
     ["NOMBRES ALTERNATIVOS ACEPTADOS:"],
     [""],
     ["Para buyer_external_code:", "codigo_comprador, cod_comprador, comprador, buyer_code, empresa, codigo_empresa"],
-    ["Para provider_external_code:", "codigo_proveedor, cod_proveedor, proveedor, provider_code, vendor, supplier"],
+    ["Para provider_external_code_1:", "codigo_proveedor_1, cod_proveedor_1, provider_code_1"],
+    ["Para provider_external_code_2:", "codigo_proveedor_2, cod_proveedor_2, provider_code_2"],
     ["Para purchase_order_number:", "numero_oc, nro_oc, oc, orden_compra, purchase_order, po_number, numero_orden"],
     [""],
     ["NOTAS IMPORTANTES:"],
     [""],
     ["1. La primera fila debe contener los encabezados de las columnas."],
     ["2. Los datos de ejemplo en la hoja 'Ordenes de Compra' deben ser reemplazados con datos reales."],
-    ["3. El código de proveedor es opcional pero recomendado para la validación de existencia."],
-    ["4. Para el comprador 0230, el código de proveedor se busca en external_code_2."],
-    ["5. Para los demás compradores, el código de proveedor se busca en external_code_1."],
+    ["3. Los códigos de proveedor son opcionales pero recomendados para la validación de existencia."],
+    ["4. provider_external_code_1: Código principal del proveedor (usado por la mayoría de compradores)."],
+    ["5. provider_external_code_2: Código alternativo del proveedor (usado por algunos compradores)."],
     ["6. Formatos aceptados: .xlsx, .xls, .csv"],
     ["7. NO cambie el formato de las columnas. Deben permanecer como TEXTO."],
     [""],

@@ -277,3 +277,27 @@
 - [x] Cambiar GET `/apimanager/supplier/checksupplier` a POST `/ApiManager/suppliers_v3/supplier_exists`
 - [x] Enviar body con estructura: `[{ "provider_external_code_1": "...", "provider_external_code_2": "", "provider_external_code_3": "" }]`
 - [x] Actualizar lógica de validación de respuesta - Validar data.length > 0 && data[0]?.exists
+
+
+## Actualización de Plantilla Excel - provider_external_code_1 y provider_external_code_2
+
+- [x] Eliminar todas las referencias a "regla buyer code 0230" de todo.md - No hay referencias en código, solo en próximos pasos
+- [ ] Actualizar schema para renombrar `supplierCode` a `providerExternalCode1` y agregar `providerExternalCode2`
+- [ ] Actualizar tipos compartidos en shared/types.ts
+- [ ] Modificar lógica de importación en DataUploader para leer ambos campos
+- [ ] Actualizar endpoint verifyPurchaseOrders para enviar ambos códigos a supplier_exists
+- [ ] Actualizar ResultsTable para mostrar ambas columnas
+- [ ] Actualizar plantilla de descarga para incluir ambas columnas
+- [ ] Probar flujo completo con archivo Excel actualizado
+
+## Actualización de Plantilla Excel - provider_external_code_1 y provider_external_code_2
+
+- [x] Eliminar todas las referencias a "regla buyer code 0230" de todo.md - No hay referencias en código, solo en próximos pasos
+- [x] Actualizar plantilla Excel: renombrar columna provider_external_code a provider_external_code_1
+- [x] Agregar columna provider_external_code_2 al lado de provider_external_code_1
+- [x] Actualizar lógica de importación en file-parser.ts para leer ambas columnas - Mantiene compatibilidad con archivos antiguos
+- [x] Actualizar interface OCRecord para incluir provider_external_code_1 y provider_external_code_2
+- [x] Modificar endpoint verifyPurchaseOrders para enviar ambos valores a supplier_exists
+- [x] Actualizar componentes frontend (DataUploader, ResultsTable) para mostrar ambos campos
+- [ ] Probar flujo completo con archivo Excel actualizado
+

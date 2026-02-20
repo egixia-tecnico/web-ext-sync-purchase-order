@@ -206,7 +206,8 @@ export default function DataUploader() {
                   <p className="font-medium">Columnas requeridas (formato texto):</p>
                   <p className="mt-0.5">
                     <span className="font-mono bg-amber-100 px-1 rounded">buyer_external_code</span> (o codigo_comprador),{" "}
-                    <span className="font-mono bg-amber-100 px-1 rounded">provider_external_code</span> (o codigo_proveedor),{" "}
+                    <span className="font-mono bg-amber-100 px-1 rounded">provider_external_code_1</span> (o codigo_proveedor_1),{" "}
+                    <span className="font-mono bg-amber-100 px-1 rounded">provider_external_code_2</span> (o codigo_proveedor_2),{" "}
                     <span className="font-mono bg-amber-100 px-1 rounded">purchase_order_number</span> (o numero_oc)
                   </p>
                   <p className="mt-1 text-amber-600">

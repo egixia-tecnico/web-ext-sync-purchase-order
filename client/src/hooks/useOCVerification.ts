@@ -34,7 +34,8 @@ export function useOCVerification() {
       const result = await verifyBatchMutation.mutateAsync({
         orders: targets.map(r => ({
           purchaseOrderId: r.purchase_order_number,
-          supplierCode: r.provider_external_code,
+          providerExternalCode1: r.provider_external_code_1 || r.provider_external_code || "",
+          providerExternalCode2: r.provider_external_code_2 || "",
           buyerCode: r.buyer_external_code,
         })),
         clientKey: clientKey || undefined,

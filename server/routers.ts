@@ -296,7 +296,8 @@ export const appRouter = router({
       .input(z.object({
         orders: z.array(z.object({
           purchaseOrderId: z.string(),
-          supplierCode: z.string(),
+          providerExternalCode1: z.string(),
+          providerExternalCode2: z.string().optional(),
           buyerCode: z.string().optional(),
         })),
         clientKey: z.string().optional(),
@@ -315,7 +316,8 @@ export const appRouter = router({
             if (data && data.PurchaseOrderId) {
               results.push({
                 purchaseOrderId: order.purchaseOrderId,
-                supplierCode: order.supplierCode,
+                providerExternalCode1: order.providerExternalCode1,
+                providerExternalCode2: order.providerExternalCode2 || "",
                 buyerCode: order.buyerCode,
                 status: "found",
                 syncStatus: data.SyncStatus || "unknown",
@@ -325,8 +327,8 @@ export const appRouter = router({
                 `/ApiManager/suppliers_v3/supplier_exists`,
                 "POST",
                 [{
-                  provider_external_code_1: order.supplierCode,
-                  provider_external_code_2: "",
+                  provider_external_code_1: order.providerExternalCode1,
+                  provider_external_code_2: order.providerExternalCode2 || "",
                   provider_external_code_3: ""
                 }],
                 input.clientKey
@@ -335,7 +337,8 @@ export const appRouter = router({
               if (supplierExists && supplierExists.length > 0 && supplierExists[0]?.exists) {
                 results.push({
                   purchaseOrderId: order.purchaseOrderId,
-                  supplierCode: order.supplierCode,
+                  providerExternalCode1: order.providerExternalCode1,
+                  providerExternalCode2: order.providerExternalCode2 || "",
                   buyerCode: order.buyerCode,
                   status: "not_found",
                   syncStatus: null,
@@ -343,7 +346,8 @@ export const appRouter = router({
               } else {
                 results.push({
                   purchaseOrderId: order.purchaseOrderId,
-                  supplierCode: order.supplierCode,
+                  providerExternalCode1: order.providerExternalCode1,
+                  providerExternalCode2: order.providerExternalCode2 || "",
                   buyerCode: order.buyerCode,
                   status: "supplier_not_exists",
                   syncStatus: null,
@@ -353,7 +357,8 @@ export const appRouter = router({
           } catch (error: any) {
             results.push({
               purchaseOrderId: order.purchaseOrderId,
-              supplierCode: order.supplierCode,
+              providerExternalCode1: order.providerExternalCode1,
+              providerExternalCode2: order.providerExternalCode2 || "",
               buyerCode: order.buyerCode,
               status: "error",
               syncStatus: null,
