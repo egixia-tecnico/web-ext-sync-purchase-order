@@ -270,3 +270,10 @@
 - [x] Eliminar parámetro `SupplierCode` de la petición a `getpurchaseorder`
 - [x] Corregir endpoint de `/apimanager/purchaseorder/getpurchaseorder` a `/apimanager/purchase_order_v1/list`
 - [ ] Probar flujo completo con archivo OrdenesCompraPortalTEST.xlsx
+
+
+## Corrección de Endpoint checkSupplier
+
+- [x] Cambiar GET `/apimanager/supplier/checksupplier` a POST `/ApiManager/suppliers_v3/supplier_exists`
+- [x] Enviar body con estructura: `[{ "provider_external_code_1": "...", "provider_external_code_2": "", "provider_external_code_3": "" }]`
+- [x] Actualizar lógica de validación de respuesta - Validar data.length > 0 && data[0]?.exists

@@ -322,13 +322,17 @@ export const appRouter = router({
               });
             } else {
               const supplierExists = await callEgixiaApi(
-                `/apimanager/supplier/checksupplier?SupplierCode=${order.supplierCode}`,
-                "GET",
-                undefined,
+                `/ApiManager/suppliers_v3/supplier_exists`,
+                "POST",
+                [{
+                  provider_external_code_1: order.supplierCode,
+                  provider_external_code_2: "",
+                  provider_external_code_3: ""
+                }],
                 input.clientKey
               );
 
-              if (supplierExists?.Exists) {
+              if (supplierExists && supplierExists.length > 0 && supplierExists[0]?.exists) {
                 results.push({
                   purchaseOrderId: order.purchaseOrderId,
                   supplierCode: order.supplierCode,
@@ -404,12 +408,16 @@ export const appRouter = router({
       }))
       .query(async ({ input }) => {
         const data = await callEgixiaApi(
-          `/apimanager/supplier/checksupplier?SupplierCode=${input.supplierCode}`,
-          "GET",
-          undefined,
+          `/ApiManager/suppliers_v3/supplier_exists`,
+          "POST",
+          [{
+            provider_external_code_1: input.supplierCode,
+            provider_external_code_2: "",
+            provider_external_code_3: ""
+          }],
           input.clientKey
         );
-        return { exists: data?.Exists || false };
+        return { exists: (data && data.length > 0 && data[0]?.exists) || false };
       }),
 
     getVerificationHistory: publicProcedure
