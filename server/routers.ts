@@ -313,16 +313,63 @@ export const appRouter = router({
               input.clientKey
             );
 
-            if (data && data.PurchaseOrderId) {
-              results.push({
-                purchaseOrderId: order.purchaseOrderId,
-                providerExternalCode1: order.providerExternalCode1,
-                providerExternalCode2: order.providerExternalCode2 || "",
-                buyerCode: order.buyerCode,
-                status: "found",
-                syncStatus: data.SyncStatus || "unknown",
-              });
+            // Check if order is synchronized (SDTOrdenesCompra has data)
+            // Verify exact match of buyer_external_code and purchase_order_number
+            if (data && data.SDTOrdenesCompra && Array.isArray(data.SDTOrdenesCompra) && data.SDTOrdenesCompra.length > 0) {
+              const orderData = data.SDTOrdenesCompra.find(
+                (oc: any) => 
+                  oc.buyer_external_code === order.buyerCode && 
+                  oc.purchase_order_number === order.purchaseOrderId
+              );
+              
+              if (orderData) {
+                // OC found and synchronized - NO need to check supplier
+                results.push({
+                  purchaseOrderId: order.purchaseOrderId,
+                  providerExternalCode1: order.providerExternalCode1,
+                  providerExternalCode2: order.providerExternalCode2 || "",
+                  buyerCode: order.buyerCode,
+                  status: "found", // Order is synchronized
+                  syncStatus: "synchronized",
+                  documentDate: orderData.document_date || null,
+                  synchronizationDate: orderData.synchronization_date || null,
+                });
+              } else {
+                // Response has data but no exact match - treat as not found
+                // Check if supplier exists
+                const supplierExists = await callEgixiaApi(
+                  `/ApiManager/suppliers_v3/supplier_exists`,
+                  "POST",
+                  [{
+                    provider_external_code_1: order.providerExternalCode1,
+                    provider_external_code_2: order.providerExternalCode2 || "",
+                    provider_external_code_3: ""
+                  }],
+                  input.clientKey
+                );
+
+                if (supplierExists?.outlist_provider && supplierExists.outlist_provider.length > 0 && supplierExists.outlist_provider[0]?.provider_exists === true) {
+                  results.push({
+                    purchaseOrderId: order.purchaseOrderId,
+                    providerExternalCode1: order.providerExternalCode1,
+                    providerExternalCode2: order.providerExternalCode2 || "",
+                    buyerCode: order.buyerCode,
+                    status: "not_found",
+                    syncStatus: null,
+                  });
+                } else {
+                  results.push({
+                    purchaseOrderId: order.purchaseOrderId,
+                    providerExternalCode1: order.providerExternalCode1,
+                    providerExternalCode2: order.providerExternalCode2 || "",
+                    buyerCode: order.buyerCode,
+                    status: "supplier_not_exists",
+                    syncStatus: null,
+                  });
+                }
+              }
             } else {
+              // Order not found - check if supplier exists
               const supplierExists = await callEgixiaApi(
                 `/ApiManager/suppliers_v3/supplier_exists`,
                 "POST",

@@ -40,7 +40,7 @@
 - [x] Al sincronizar pasa al step final Exportar con grid actualizado sin opción de re-sincronizar
 - [x] Botón "Sincronizar X de Y" en step Resultados pasa directamente al step Sincronizar y ejecuta integración automáticamente sin botones adicionales
 - [x] BUG: Proveedor 1204860 se marca como "no existe" - corregido: aplicado trim() a todos los códigos antes de enviar a API
-- [ ] Aplicar trim() a códigos de proveedor que vienen de la respuesta de la API (no solo al enviar)
+- [x] Aplicar trim() a códigos de proveedor que vienen de la respuesta de la API (no solo al enviar)
 - [x] Agregar vista de historial de verificaciones en el menú de configuración (desplegable en header con Settings + History)
 - [x] BUG CRÍTICO: Proveedor 1204860 existe pero se marca como "Proveedor no existe" - debe ir a "No encontradas" si OC no existe pero proveedor SÍ (corregido en checkpoint anterior)
 
@@ -146,6 +146,15 @@
 - [x] Actualizar AdminLogin.tsx para pasar window.location.origin al endpoint
 - [x] El endpoint ahora construye callbackUrl usando input.origin || "http://localhost:3000"
 - [ ] Probar flujo completo: solicitar magic link → verificar URL correcta en correo → validar acceso
+
+## Optimización de Verificación de Proveedor
+- [x] Implementar validación exacta de buyer_external_code y purchase_order_number en respuesta de /purchase_order_v1/list
+- [x] NO verificar proveedor cuando OC está sincronizada (optimización de rendimiento)
+- [x] Verificar proveedor solo cuando OC NO está en el portal
+- [x] Crear función formatProviderCodes en shared/utils.ts para mostrar códigos separados por " - "
+- [x] Actualizar ResultsTable para usar formatProviderCodes en visualización
+- [x] Actualizar búsqueda en ResultsTable para usar formatProviderCodes
+- [x] 19 tests pasando después de optimización
 
 ## Corrección de Error de Assets en Producción
 - [x] BUG CRÍTICO: Error "Minified React error #318" al acceder a /clients en producción después de autenticación con magic link - CAUSA: Cookie admin_session sin flag Secure en HTTPS
@@ -309,3 +318,14 @@
 - [x] Primera validación (línea 337): `supplierExists?.outlist_provider[0]?.provider_exists === true`
 - [x] Segunda validación (línea 425): `data?.outlist_provider[0]?.provider_exists === true`
 - [x] Tests pasando (19/19)
+
+
+## Optimización de Verificación y Mejora Visual de Códigos de Proveedor
+
+- [ ] Modificar lógica de verificación en verifyPurchaseOrders: si `/purchase_order_v1/list` retorna datos (coincidencia de buyer_external_code y purchase_order_number), marcar como "Sincronizada" SIN verificar proveedor
+- [ ] Solo verificar proveedor cuando la orden NO esté sincronizada (no encontrada en portal)
+- [ ] Crear función helper `formatProviderCodes(code1, code2, code3)` que retorne códigos separados por " - " (ej: "1231015 - 1231015" o "558888" si solo hay uno)
+- [ ] Actualizar ResultsTable para mostrar códigos formateados en columna "Proveedor"
+- [ ] Actualizar DataUploader para mostrar códigos formateados en vista previa
+- [ ] Mantener valores separados internamente (provider_external_code_1, provider_external_code_2, provider_external_code_3)
+- [ ] Probar flujo completo con archivo Excel que incluya órdenes sincronizadas y no sincronizadas

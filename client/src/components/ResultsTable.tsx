@@ -9,6 +9,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useOCSync, type OCRecord } from "@/contexts/OCSyncContext";
+import { formatProviderCodes } from "@shared/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -133,7 +134,7 @@ export default function ResultsTable() {
       result = result.filter(r =>
         r.purchase_order_number.toLowerCase().includes(term) ||
         r.buyer_external_code.toLowerCase().includes(term) ||
-        r.provider_external_code.toLowerCase().includes(term) ||
+        formatProviderCodes(r.provider_external_code_1, r.provider_external_code_2).toLowerCase().includes(term) ||
         (r.buyer_name || "").toLowerCase().includes(term) ||
         (r.provider_name || "").toLowerCase().includes(term) ||
         (r.statusMessage || "").toLowerCase().includes(term)
@@ -260,9 +261,9 @@ export default function ResultsTable() {
                   Comprador <SortIcon field="buyer_external_code" />
                 </div>
               </th>
-              <th className="p-3 cursor-pointer select-none hover:text-foreground" onClick={() => handleSort("provider_external_code")}>
+              <th className="p-3 cursor-pointer select-none hover:text-foreground" onClick={() => handleSort("provider_external_code_1")}>
                 <div className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Proveedor <SortIcon field="provider_external_code" />
+                  Proveedor <SortIcon field="provider_external_code_1" />
                 </div>
               </th>
               <th className="p-3">
@@ -326,7 +327,7 @@ export default function ResultsTable() {
                     </td>
                     <td className="p-3">
                       <div>
-                        <span className="font-mono text-xs">{record.provider_external_code || "—"}</span>
+                        <span className="font-mono text-xs">{formatProviderCodes(record.provider_external_code_1, record.provider_external_code_2) || "—"}</span>
                         {record.provider_name && (
                           <p className="text-[11px] text-muted-foreground truncate max-w-[180px]">{record.provider_name}</p>
                         )}
