@@ -398,3 +398,15 @@
 - [x] Crear función deleteIntegrationLogsByClientKey en server/db.ts
 - [x] Llamar función al inicio de verifyPurchaseOrders antes de procesar órdenes
 - [x] Solo eliminar logs del clientKey específico
+
+## Diagnóstico de Error 403 en gettoken
+
+### Problema Identificado
+- El servidor de Egixia bloqueaba peticiones con User-Agent por defecto de axios/Node.js
+- Postman funcionaba porque usa User-Agent "PostmanRuntime/7.51.1"
+
+### Solución Implementada
+- [x] Agregar User-Agent "PostmanRuntime/7.51.1" a peticiones de getToken
+- [x] Agregar User-Agent "PostmanRuntime/7.51.1" a peticiones de callEgixiaApi
+- [x] Agregar logs detallados para capturar request completo y response
+- [x] Problema resuelto: conexión funciona correctamente

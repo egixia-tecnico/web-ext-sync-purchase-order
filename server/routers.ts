@@ -85,12 +85,19 @@ async function getToken(baseUrl: string, userName: string, password: string, cli
   const url = `${cleanBaseUrl}/apimanager/access/gettoken`;
 
   console.log("[Egixia] Requesting new token from:", url);
+  console.log("[Egixia] Request body:", JSON.stringify({ UserName: userName, Password: "***", ClientId: clientId, ClientSecret: "***" }));
 
   try {
     const response = await axios.post(
       url,
       { UserName: userName, Password: password, ClientId: clientId, ClientSecret: clientSecret },
-      { headers: { "Content-Type": "application/json" }, timeout: 30000 }
+      { 
+        headers: { 
+          "Content-Type": "application/json",
+          "User-Agent": "PostmanRuntime/7.51.1"
+        }, 
+        timeout: 30000 
+      }
     );
 
     if (response.status !== 200) {
@@ -137,6 +144,9 @@ async function getToken(baseUrl: string, userName: string, password: string, cli
     }
     
     console.error("[Egixia] Token request failed:", err.message);
+    console.error("[Egixia] HTTP Status:", httpStatus);
+    console.error("[Egixia] Response data:", err.response?.data);
+    console.error("[Egixia] Response headers:", err.response?.headers);
     cachedToken = null;
     tokenExpiry = 0;
     throw new Error(`Error al obtener token: ${err.message}`);
@@ -163,7 +173,11 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
     const response = await axios({
       method,
       url,
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: { 
+        Authorization: `Bearer ${token}`, 
+        "Content-Type": "application/json",
+        "User-Agent": "PostmanRuntime/7.51.1"
+      },
       data: body,
       timeout: 30000,
     });
