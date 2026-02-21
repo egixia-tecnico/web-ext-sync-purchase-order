@@ -29,7 +29,7 @@ export default function AdminLogin() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.endsWith("@egixia.com")) {
-      toast.error("Solo se permiten correos @egixia.com");
+      toast.error("Solo se permiten correos @egixia.com", { position: "bottom-left" });
       return;
     }
     sendMagicLink.mutate({ 

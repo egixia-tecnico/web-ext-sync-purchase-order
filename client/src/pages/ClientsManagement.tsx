@@ -64,10 +64,10 @@ export default function ClientsManagement() {
   const handleSetActive = async (id: number) => {
     try {
       await setActiveMutation.mutateAsync({ id });
-      toast.success("Cliente activado correctamente", { position: "top-center" });
+      toast.success("Cliente activado correctamente", { position: "bottom-left" });
       refetch();
     } catch (error: any) {
-      toast.error(error.message || "Error al activar cliente", { position: "top-center" });
+      toast.error(error.message || "Error al activar cliente", { position: "bottom-left" });
     }
   };
 
@@ -76,11 +76,11 @@ export default function ClientsManagement() {
     
     try {
       await deleteMutation.mutateAsync({ id: deletingClientId });
-      toast.success("Cliente eliminado correctamente", { position: "top-center" });
+      toast.success("Cliente eliminado correctamente", { position: "bottom-left" });
       setDeletingClientId(null);
       refetch();
     } catch (error: any) {
-      toast.error(error.message || "Error al eliminar cliente", { position: "top-center" });
+      toast.error(error.message || "Error al eliminar cliente", { position: "bottom-left" });
     }
   };
 

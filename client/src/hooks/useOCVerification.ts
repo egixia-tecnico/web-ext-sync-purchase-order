@@ -19,7 +19,7 @@ export function useOCVerification() {
     // Use selected records if no specific records provided
     const targets = recordsToVerify || records.filter(r => selectedRecords.has(r.id));
     if (targets.length === 0) {
-      toast.warning("No hay registros seleccionados para verificar", { position: "top-center" });
+      toast.warning("No hay registros seleccionados para verificar", { position: "bottom-left" });
       return;
     }
 
@@ -76,7 +76,7 @@ export function useOCVerification() {
         const s = result.summary;
         toast.success(
           `Verificación completada: ${s.found} sincronizadas, ${s.not_found} no encontradas, ${s.supplier_not_exists} proveedor no existe, ${s.errors} errores`,
-          { position: "top-center", duration: 8000 }
+          { position: "bottom-left", duration: 8000 }
         );
       }
 
@@ -84,14 +84,20 @@ export function useOCVerification() {
       if (result.clientInfo?.syncRules && (result.summary.not_found > 0 || result.summary.supplier_not_exists > 0)) {
         toast.info(
           `Reglas de sincronización: ${result.clientInfo.syncRules}`,
-          { position: "top-center", duration: 10000 }
+          { position: "bottom-left", duration: 10000 }
         );
       }
 
       setProgress({ current: targets.length, total: targets.length });
     } catch (err: any) {
       const errorMsg = err?.message || "Error desconocido";
-      toast.error(`Error en verificación: ${errorMsg}`, { position: "top-center", duration: 6000 });
+      
+      // Handle 503 Service Unavailable with specific message
+      if (errorMsg.includes("NO_CONNECTION_503")) {
+        toast.error("No hay conexión con el servidor", { position: "bottom-left", duration: 6000 });
+      } else {
+        toast.error(`Error en verificación: ${errorMsg}`, { position: "bottom-left", duration: 6000 });
+      }
 
       // Mark all as error
       const errorUpdates = targets.map(r => ({
@@ -114,7 +120,7 @@ export function useOCVerification() {
     const toSync = targets.filter(r => r.status !== "synced");
     
     if (toSync.length === 0) {
-      toast.warning("No hay registros pendientes de sincronización", { position: "top-center" });
+      toast.warning("No hay registros pendientes de sincronización", { position: "bottom-left" });
       return { success: 0, failed: 0, skipped: targets.length - toSync.length };
     }
 
@@ -163,11 +169,11 @@ export function useOCVerification() {
     // Show summary toast
     const total = toSync.length;
     if (successCount === total) {
-      toast.success(`${successCount} de ${total} órdenes sincronizadas correctamente`, { position: "top-center", duration: 5000 });
+      toast.success(`${successCount} de ${total} órdenes sincronizadas correctamente`, { position: "bottom-left", duration: 5000 });
     } else if (successCount > 0) {
-      toast.warning(`${successCount} de ${total} órdenes sincronizadas correctamente`, { position: "top-center", duration: 5000 });
+      toast.warning(`${successCount} de ${total} órdenes sincronizadas correctamente`, { position: "bottom-left", duration: 5000 });
     } else {
-      toast.error(`0 de ${total} órdenes sincronizadas`, { position: "top-center", duration: 5000 });
+      toast.error(`0 de ${total} órdenes sincronizadas`, { position: "bottom-left", duration: 5000 });
     }
 
     return { success: successCount, failed: failedCount, skipped: targets.length - toSync.length };

@@ -63,7 +63,7 @@ export default function ActionBar() {
 
   const handleVerify = async () => {
     if (connectionStatus !== "connected") {
-      toast.error("No hay conexión con la API. Configure las credenciales primero.", { position: "top-center" });
+      toast.error("No hay conexión con la API. Configure las credenciales primero.", { position: "bottom-left" });
       return;
     }
 
@@ -77,12 +77,12 @@ export default function ActionBar() {
   // Triggered when user clicks "Sincronizar X de Y" in step 3
   const handleGoToSync = () => {
     if (connectionStatus !== "connected") {
-      toast.error("No hay conexión con la API. Configure las credenciales primero.", { position: "top-center" });
+      toast.error("No hay conexión con la API. Configure las credenciales primero.", { position: "bottom-left" });
       return;
     }
 
     if (selectedCount === 0) {
-      toast.warning("No hay registros seleccionados para sincronizar", { position: "top-center" });
+      toast.warning("No hay registros seleccionados para sincronizar", { position: "bottom-left" });
       return;
     }
 
@@ -93,14 +93,14 @@ export default function ActionBar() {
   // Auto-executed when step 4 is entered
   const handleAutoSync = async () => {
     if (connectionStatus !== "connected") {
-      toast.error("No hay conexión con la API. Configure las credenciales primero.", { position: "top-center" });
+      toast.error("No hay conexión con la API. Configure las credenciales primero.", { position: "bottom-left" });
       setCurrentStep(3);
       return;
     }
 
     const toSync = records.filter(r => selectedRecords.has(r.id));
     if (toSync.length === 0) {
-      toast.warning("No hay registros seleccionados para sincronizar", { position: "top-center" });
+      toast.warning("No hay registros seleccionados para sincronizar", { position: "bottom-left" });
       setCurrentStep(3);
       return;
     }
@@ -117,7 +117,7 @@ export default function ActionBar() {
     const now = new Date();
     const dateStr = `${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, "0")}_${String(now.getDate()).padStart(2, "0")}`;
     downloadCSV(toExport, `verificacion_oc_${dateStr}.csv`);
-    toast.success(`${toExport.length} registros exportados`, { position: "top-center" });
+    toast.success(`${toExport.length} registros exportados`, { position: "bottom-left" });
   };
 
   return (

@@ -26,7 +26,7 @@ export default function IntegrationLogsDialog({ open, onOpenChange }: Integratio
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
-    toast.success(`${label} copiado al portapapeles`, { position: "top-center" });
+    toast.success(`${label} copiado al portapapeles`, { position: "bottom-left" });
   };
 
   const getStatusIcon = (status: string) => {

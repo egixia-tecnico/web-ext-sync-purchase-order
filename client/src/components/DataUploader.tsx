@@ -46,7 +46,7 @@ export default function DataUploader() {
     const ext = file.name.split(".").pop()?.toLowerCase();
     
     if (!["xlsx", "xls", "csv"].includes(ext || "")) {
-      toast.error("Formato no soportado. Use archivos .xlsx, .xls o .csv");
+      toast.error("Formato no soportado. Use archivos .xlsx, .xls o .csv", { position: "bottom-left" });
       return;
     }
 
@@ -54,24 +54,24 @@ export default function DataUploader() {
       const parsed = await parseFileData(file);
       setRecords(parsed);
       setFileName(file.name);
-      toast.success(`${parsed.length} órdenes de compra cargadas desde ${file.name}. Todos los registros seleccionados.`);
+      toast.success(`${parsed.length} órdenes de compra cargadas desde ${file.name}. Todos los registros seleccionados.`, { position: "bottom-left" });
     } catch (err: any) {
-      toast.error(err?.message || "Error al procesar el archivo");
+      toast.error(err?.message || "Error al procesar el archivo", { position: "bottom-left" });
     }
   };
 
   const handleManualSubmit = () => {
     if (!manualText.trim()) {
-      toast.error("Ingrese datos para procesar");
+      toast.error("Ingrese datos para procesar", { position: "bottom-left" });
       return;
     }
     const parsed = parseManualInput(manualText);
     if (parsed.length === 0) {
-      toast.error("No se encontraron registros válidos. Use formato: comprador, proveedor, nro_oc (uno por línea)");
+      toast.error("No se encontraron registros válidos. Use formato: comprador, proveedor, nro_oc (uno por línea)", { position: "bottom-left" });
       return;
     }
     setRecords(parsed);
-    toast.success(`${parsed.length} órdenes de compra cargadas. Todos los registros seleccionados.`);
+    toast.success(`${parsed.length} órdenes de compra cargadas. Todos los registros seleccionados.`, { position: "bottom-left" });
   };
 
   const handleClear = () => {
@@ -84,9 +84,9 @@ export default function DataUploader() {
   const handleDownloadTemplate = () => {
     try {
       downloadTemplate();
-      toast.success("Plantilla descargada correctamente");
+      toast.success("Plantilla descargada correctamente", { position: "bottom-left" });
     } catch (err: any) {
-      toast.error("Error al generar la plantilla");
+      toast.error("Error al generar la plantilla", { position: "bottom-left" });
     }
   };
 

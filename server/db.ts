@@ -282,6 +282,28 @@ export async function getIntegrationLogs(clientId: number) {
   return result;
 }
 
+export async function deleteIntegrationLogsByClientKey(clientKey: string) {
+  const db = await getDb();
+  if (!db) return false;
+
+  try {
+    // Get client by key
+    const client = await getClientByKey(clientKey);
+    if (!client) {
+      console.warn(`[Database] Client not found for key: ${clientKey}`);
+      return false;
+    }
+
+    // Delete all logs for this client
+    await db.delete(integrationLogs).where(eq(integrationLogs.clientId, client.id));
+    console.log(`[Database] Deleted all integration logs for client: ${client.name}`);
+    return true;
+  } catch (error) {
+    console.error("[Database] Failed to delete integration logs:", error);
+    return false;
+  }
+}
+
 async function cleanOldIntegrationLogs(clientId: number) {
   const db = await getDb();
   if (!db) return;

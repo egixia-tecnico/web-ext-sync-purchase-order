@@ -2,7 +2,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { saveVerificationLog, getVerificationHistory, getClients, getClientById, getClientByKey, getActiveClient, createClient, updateClient, deleteClient, setActiveClient, createMagicLink, getMagicLinkByToken, markMagicLinkAsUsed, getIntegrationLogs, saveIntegrationLog } from "./db";
+import { saveVerificationLog, getVerificationHistory, getClients, getClientById, getClientByKey, getActiveClient, createClient, updateClient, deleteClient, setActiveClient, createMagicLink, getMagicLinkByToken, markMagicLinkAsUsed, getIntegrationLogs, saveIntegrationLog, deleteIntegrationLogsByClientKey } from "./db";
 import { sendMagicLinkEmail, isSendGridConfigured } from "./email";
 import axios from "axios";
 import { AXIOS_TIMEOUT_MS } from "@shared/const";
@@ -111,6 +111,31 @@ async function getToken(baseUrl: string, userName: string, password: string, cli
     console.log("[Egixia] Token obtained, expires in", expiresIn, "seconds");
     return cachedToken!;
   } catch (err: any) {
+    const httpStatus = err.response?.status;
+    
+    // Handle 503 Service Unavailable - server is down
+    if (httpStatus === 503) {
+      console.error("[Egixia] 503 Service Unavailable: No hay conexión con el servidor");
+      cachedToken = null;
+      tokenExpiry = 0;
+      
+      // Save simplified log for 503 errors
+      const client = await getActiveClient(); // Get active client
+      if (client) {
+        await saveIntegrationLog({
+          clientId: client.id,
+          url: "No hay conexión",
+          requestBody: undefined,
+          responseBody: undefined,
+          token: undefined,
+          authPrefix: undefined,
+          status: "error",
+        });
+      }
+      
+      throw new Error("NO_CONNECTION_503"); // Special error code for frontend
+    }
+    
     console.error("[Egixia] Token request failed:", err.message);
     cachedToken = null;
     tokenExpiry = 0;
@@ -322,6 +347,11 @@ export const appRouter = router({
         clientKey: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
+        // Clean all integration logs for this client before verification
+        if (input.clientKey) {
+          await deleteIntegrationLogsByClientKey(input.clientKey);
+        }
+        
         const results = [];
         for (const order of input.orders) {
           try {

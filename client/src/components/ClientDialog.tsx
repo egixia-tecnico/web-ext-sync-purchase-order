@@ -84,14 +84,14 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
     try {
       if (clientId) {
         await updateMutation.mutateAsync({ id: clientId, ...formData });
-        toast.success("Cliente actualizado correctamente", { position: "top-center" });
+        toast.success("Cliente actualizado correctamente", { position: "bottom-left" });
       } else {
         await createMutation.mutateAsync(formData);
-        toast.success("Cliente creado correctamente", { position: "top-center" });
+        toast.success("Cliente creado correctamente", { position: "bottom-left" });
       }
       onClose(true);
     } catch (error: any) {
-      toast.error(error.message || "Error al guardar cliente", { position: "top-center" });
+      toast.error(error.message || "Error al guardar cliente", { position: "bottom-left" });
     }
   };
 
@@ -105,7 +105,7 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
 
   const handleTestConnection = async () => {
     if (!formData.baseUrl || !formData.userName || !formData.password || !formData.clientId || !formData.clientSecret) {
-      toast.error("Complete todos los campos de conexión antes de probar", { position: "top-center" });
+      toast.error("Complete todos los campos de conexión antes de probar", { position: "bottom-left" });
       return;
     }
 
@@ -120,11 +120,11 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
       });
 
       if (result.success) {
-        toast.success(result.message, { position: "top-center" });
+        toast.success(result.message, { position: "bottom-left" });
         setConnectionTested(true);
         setTestSuccess(true);
       } else {
-        toast.error(result.message, { position: "top-center" });
+        toast.error(result.message, { position: "bottom-left" });
         setConnectionTested(false);
         setTestSuccess(false);
       }
@@ -134,7 +134,7 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
         setShowDebugDialog(true);
       }
     } catch (error: any) {
-      toast.error(error.message || "Error al probar conexión", { position: "top-center" });
+      toast.error(error.message || "Error al probar conexión", { position: "bottom-left" });
       setConnectionTested(false);
       setTestSuccess(false);
     } finally {

@@ -381,3 +381,20 @@
 - [x] Agregar detección de mensaje "Not found Buyer." en synchronizePurchaseOrder
 - [x] Mostrar mensaje descriptivo: "No existe la empresa compradora, verifique que el número contenga incluso los ceros a la izquierda en caso que aplique"
 - [x] Marcar como error cuando TotalOCs=0 y message contiene "Not found Buyer"
+
+## Mejoras de UX y Manejo de Errores
+
+### 1. Manejo de Error 503 en gettoken
+- [x] Detectar status 503 en callEgixiaApi cuando endpoint es gettoken
+- [x] Mostrar toast rojo con mensaje "No hay conexión con el servidor"
+- [x] Registrar en log solo "No hay conexión" (sin información de petición)
+- [x] Agregar manejo en frontend (useOCVerification) para detectar error NO_CONNECTION_503
+
+### 2. Posición de Toasts
+- [x] Cambiar todos los toasts a position: "bottom-left" (parte inferior izquierda)
+- [x] Actualizado en: ActionBar, DataUploader, ClientDialog, IntegrationLogsDialog, AdminLogin, ClientsManagement, useOCVerification
+
+### 3. Limpieza de Logs antes de Verificar
+- [x] Crear función deleteIntegrationLogsByClientKey en server/db.ts
+- [x] Llamar función al inicio de verifyPurchaseOrders antes de procesar órdenes
+- [x] Solo eliminar logs del clientKey específico
