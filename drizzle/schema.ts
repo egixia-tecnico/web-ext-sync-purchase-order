@@ -67,6 +67,7 @@ export const magicLinks = mysqlTable("magic_links", {
   id: int("id").autoincrement().primaryKey(),
   email: varchar("email", { length: 320 }).notNull(),
   token: varchar("token", { length: 64 }).notNull().unique(),
+  returnPath: varchar("returnPath", { length: 512 }), // optional path to redirect after authentication
   expiresAt: timestamp("expiresAt").notNull(),
   used: boolean("used").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

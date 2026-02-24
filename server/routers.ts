@@ -247,10 +247,11 @@ export const appRouter = router({
     sendMagicLink: publicProcedure
       .input(z.object({ 
         email: z.string().email(),
-        origin: z.string().optional() 
+        origin: z.string().optional(),
+        returnPath: z.string().optional() 
       }))
       .mutation(async ({ input }) => {
-        const { email } = input;
+        const { email, returnPath } = input;
         
         // Validate @egixia.com domain
         if (!email.endsWith("@egixia.com")) {
@@ -265,6 +266,7 @@ export const appRouter = router({
         await createMagicLink({
           email,
           token,
+          returnPath: returnPath || null,
           expiresAt,
           used: false,
         });
@@ -322,7 +324,7 @@ export const appRouter = router({
           `admin_session=${sessionData}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${secureCookie}`
         );
         
-        return { success: true, email: magicLink.email };
+        return { success: true, email: magicLink.email, returnPath: magicLink.returnPath };
       }),
     
     checkAdminSession: publicProcedure.query(({ ctx }) => {

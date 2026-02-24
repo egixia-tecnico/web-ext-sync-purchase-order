@@ -96,7 +96,7 @@ export default function AppHeader({ onHistoryClick, onLogsClick }: AppHeaderProp
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onClick={() => navigate("/clients")} className="cursor-pointer">
+              <DropdownMenuItem onClick={() => navigate("/admin/login?returnPath=/clients")} className="cursor-pointer">
                 <Users className="w-4 h-4 mr-2" />
                 Gestión de Clientes
               </DropdownMenuItem>

@@ -12,6 +12,10 @@ export default function AdminLogin() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   
+  // Get returnPath from URL query params
+  const params = new URLSearchParams(window.location.search);
+  const returnPath = params.get("returnPath") || "/clients";
+  
   const sendMagicLink = trpc.auth.sendMagicLink.useMutation({
     onSuccess: () => {
       setSent(true);
@@ -34,7 +38,8 @@ export default function AdminLogin() {
     }
     sendMagicLink.mutate({ 
       email,
-      origin: window.location.origin 
+      origin: window.location.origin,
+      returnPath 
     });
   };
 

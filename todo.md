@@ -410,3 +410,20 @@
 - [x] Agregar User-Agent "PostmanRuntime/7.51.1" a peticiones de callEgixiaApi
 - [x] Agregar logs detallados para capturar request completo y response
 - [x] Problema resuelto: conexión funciona correctamente
+
+## Magic Link con returnPath para Gestión de Clientes
+
+### Objetivo
+- La opción "Gestión de Clientes" del menú debe redirigir al flujo de autenticación por correo (magic link)
+- Cuando el usuario haga clic en el enlace del correo, debe abrir directamente la página de gestión de clientes (/clients)
+
+### Tareas Completadas
+- [x] Analizar flujo actual de magic link (AdminLogin.tsx, auth.sendMagicLink, auth.validateMagicLink)
+- [x] Agregar campo returnPath a tabla magicLinks (schema.ts)
+- [x] Ejecutar db:push para aplicar cambios en schema
+- [x] Agregar parámetro returnPath a sendMagicLink para especificar ruta de destino
+- [x] Actualizar validateMagicLink para retornar returnPath en la respuesta
+- [x] Actualizar MagicLinkCallback para redirigir a returnPath de la respuesta
+- [x] Actualizar AdminLogin para leer returnPath de URL y enviarlo en sendMagicLink
+- [x] Modificar opción "Gestión de Clientes" en AppHeader para redirigir a /admin/login?returnPath=/clients
+- [ ] Probar flujo completo: clic en menú → correo → clic en enlace → página de clientes

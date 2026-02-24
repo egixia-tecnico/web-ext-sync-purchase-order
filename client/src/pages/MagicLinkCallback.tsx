@@ -12,11 +12,12 @@ export default function MagicLinkCallback() {
   const [errorMessage, setErrorMessage] = useState("");
 
   const validateMagicLink = trpc.auth.validateMagicLink.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
       setStatus("success");
-      // Redirect to clients management after 2 seconds
+      // Redirect to returnPath or default to /clients after 2 seconds
+      const targetPath = data.returnPath || "/clients";
       setTimeout(() => {
-        setLocation("/clients");
+        setLocation(targetPath);
       }, 2000);
     },
     onError: (error) => {

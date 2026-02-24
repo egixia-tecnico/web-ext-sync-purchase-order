@@ -57,6 +57,13 @@
       "when": 1771541238407,
       "tag": "0007_silent_adam_warlock",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1771947559083,
+      "tag": "0008_many_logan",
+      "breakpoints": true
     }
   ]
 }
