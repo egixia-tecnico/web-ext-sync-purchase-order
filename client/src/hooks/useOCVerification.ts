@@ -92,8 +92,14 @@ export function useOCVerification() {
     } catch (err: any) {
       const errorMsg = err?.message || "Error desconocido";
       
-      // Handle 503 Service Unavailable with specific message
-      if (errorMsg.includes("NO_CONNECTION_503")) {
+      // Handle communication failure alerts (blocking popup)
+      if (errorMsg.includes("COMMUNICATION_FAILURE_TOKEN")) {
+        (window as any).__showCommFailure?.("token");
+        return;
+      } else if (errorMsg.includes("COMMUNICATION_FAILURE_SERVICE")) {
+        (window as any).__showCommFailure?.("service");
+        return;
+      } else if (errorMsg.includes("NO_CONNECTION_503")) {
         toast.error("No hay conexión con el servidor", { position: "bottom-left", duration: 6000 });
       } else {
         toast.error(`Error en verificación: ${errorMsg}`, { position: "bottom-left", duration: 6000 });
@@ -152,9 +158,20 @@ export function useOCVerification() {
           });
         }
       } catch (err: any) {
+        const syncErrMsg = err?.message || "Error al sincronizar";
+        // Handle communication failure alerts (blocking popup)
+        if (syncErrMsg.includes("COMMUNICATION_FAILURE_TOKEN")) {
+          (window as any).__showCommFailure?.("token");
+          setIsProcessing(false);
+          return { success: successCount, failed: failedCount, skipped: 0 };
+        } else if (syncErrMsg.includes("COMMUNICATION_FAILURE_SERVICE")) {
+          (window as any).__showCommFailure?.("service");
+          setIsProcessing(false);
+          return { success: successCount, failed: failedCount, skipped: 0 };
+        }
         failedCount++;
         updateRecord(record.id, {
-          statusMessage: err?.message || "Error al sincronizar",
+          statusMessage: syncErrMsg,
         });
       }
     }

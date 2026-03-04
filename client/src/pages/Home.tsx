@@ -19,6 +19,7 @@ import DataUploader from "@/components/DataUploader";
 import KPIDashboard from "@/components/KPIDashboard";
 import ActionBar from "@/components/ActionBar";
 import ResultsTable from "@/components/ResultsTable";
+import CommunicationFailureDialog from "@/components/CommunicationFailureDialog";
 import { useOCSync } from "@/contexts/OCSyncContext";
 import { useThemeColor } from "@/contexts/ThemeColorContext";
 import { trpc } from "@/lib/trpc";
@@ -34,6 +35,17 @@ export default function Home() {
 
   const [showHistory, setShowHistory] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
+  const [commFailure, setCommFailure] = useState<{ open: boolean; type: "token" | "service" }>({ open: false, type: "token" });
+
+  // Global communication failure handler - exposed via window for hooks to use
+  useEffect(() => {
+    (window as any).__showCommFailure = (type: "token" | "service") => {
+      setCommFailure({ open: true, type });
+    };
+    return () => {
+      delete (window as any).__showCommFailure;
+    };
+  }, []);
 
   // Abrir modales automáticamente si returnPath contiene parámetros especiales
   // Esto ocurre cuando el usuario llega desde el magic link con openHistory=true o openLogs=true
@@ -231,6 +243,13 @@ export default function Home() {
           </span>
         </div>
       </footer>
+
+      {/* Popup bloqueante de falla de comunicación */}
+      <CommunicationFailureDialog
+        open={commFailure.open}
+        type={commFailure.type}
+        onClose={() => setCommFailure({ open: false, type: "token" })}
+      />
     </div>
   );
 }

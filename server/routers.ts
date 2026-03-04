@@ -11,6 +11,13 @@ import { AXIOS_TIMEOUT_MS } from "@shared/const";
 let cachedToken: string | null = null;
 let tokenExpiry: number = 0;
 
+// ===== Consecutive failure tracking per endpoint =====
+const endpointFailureCount: Record<string, number> = {};
+const MAX_CONSECUTIVE_FAILURES = 10;
+
+// Helper: sleep N milliseconds
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 /**
  * Get client credentials by clientKey or fallback to active client
  * @param clientKey - Optional client key from URL
@@ -75,6 +82,34 @@ async function getClientCredentials(clientKey?: string): Promise<{
   return null;
 }
 
+async function attemptGetToken(baseUrl: string, userName: string, password: string, clientId: string, clientSecret: string): Promise<string> {
+  const cleanBaseUrl = baseUrl.replace(/\/$/, "");
+  const url = `${cleanBaseUrl}/apimanager/access/gettoken`;
+
+  const response = await axios.post(
+    url,
+    { UserName: userName, Password: password, ClientId: clientId, ClientSecret: clientSecret },
+    { 
+      headers: { 
+        "Content-Type": "application/json",
+        "User-Agent": "PostmanRuntime/7.51.1"
+      }, 
+      timeout: 70000 
+    }
+  );
+
+  if (response.status !== 200) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  const data = response.data;
+  if (!data?.AccessToken || !data.AccessToken.trim()) {
+    throw new Error("Respuesta inválida del servidor (sin AccessToken)");
+  }
+
+  return data.AccessToken;
+}
+
 async function getToken(baseUrl: string, userName: string, password: string, clientId: string, clientSecret: string): Promise<string> {
   const now = Date.now();
   if (cachedToken && now < tokenExpiry) {
@@ -87,70 +122,55 @@ async function getToken(baseUrl: string, userName: string, password: string, cli
   console.log("[Egixia] Requesting new token from:", url);
   console.log("[Egixia] Request body:", JSON.stringify({ UserName: userName, Password: "***", ClientId: clientId, ClientSecret: "***" }));
 
-  try {
-    const response = await axios.post(
-      url,
-      { UserName: userName, Password: password, ClientId: clientId, ClientSecret: clientSecret },
-      { 
-        headers: { 
-          "Content-Type": "application/json",
-          "User-Agent": "PostmanRuntime/7.51.1"
-        }, 
-        timeout: 70000 
-      }
-    );
+  const MAX_TOKEN_RETRIES = 4;
+  const TOKEN_RETRY_DELAY_MS = 5000;
+  let lastError: any;
 
-    if (response.status !== 200) {
-      console.error("[Egixia] Token HTTP error", response.status, ":", response.statusText);
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    const data = response.data;
-    if (!data?.AccessToken || !data.AccessToken.trim()) {
-      console.error("[Egixia] Token response missing AccessToken:", data);
-      throw new Error("Respuesta inválida del servidor (sin AccessToken)");
-    }
-
-    cachedToken = data.AccessToken;
-    const expiresIn = data.expires_in || 3600;
-    tokenExpiry = now + expiresIn * 1000 - 60000;
-
-    console.log("[Egixia] Token obtained, expires in", expiresIn, "seconds");
-    return cachedToken!;
-  } catch (err: any) {
-    const httpStatus = err.response?.status;
-    
-    // Handle 503 Service Unavailable - server is down
-    if (httpStatus === 503) {
-      console.error("[Egixia] 503 Service Unavailable: No hay conexión con el servidor");
-      cachedToken = null;
-      tokenExpiry = 0;
+  for (let attempt = 1; attempt <= MAX_TOKEN_RETRIES; attempt++) {
+    try {
+      const accessToken = await attemptGetToken(baseUrl, userName, password, clientId, clientSecret);
       
-      // Save simplified log for 503 errors
-      const client = await getActiveClient(); // Get active client
-      if (client) {
-        await saveIntegrationLog({
-          clientId: client.id,
-          url: "No hay conexión",
-          requestBody: undefined,
-          responseBody: undefined,
-          token: undefined,
-          authPrefix: undefined,
-          status: "error",
-        });
+      cachedToken = accessToken;
+      const expiresIn = 3600; // default 1 hour
+      tokenExpiry = now + expiresIn * 1000 - 60000;
+
+      console.log(`[Egixia] Token obtained on attempt ${attempt}`);
+      return cachedToken!;
+    } catch (err: any) {
+      lastError = err;
+      const httpStatus = err.response?.status;
+
+      console.error(`[Egixia] Token attempt ${attempt}/${MAX_TOKEN_RETRIES} failed:`, err.message, "HTTP:", httpStatus);
+
+      // Handle 503 - server down, save log and retry
+      if (httpStatus === 503) {
+        const client = await getActiveClient();
+        if (client) {
+          await saveIntegrationLog({
+            clientId: client.id,
+            url: "No hay conexión",
+            requestBody: undefined,
+            responseBody: undefined,
+            token: undefined,
+            authPrefix: undefined,
+            status: "error",
+          });
+        }
       }
-      
-      throw new Error("NO_CONNECTION_503"); // Special error code for frontend
+
+      // Wait 5 seconds before retrying (except on last attempt)
+      if (attempt < MAX_TOKEN_RETRIES) {
+        console.log(`[Egixia] Waiting 5 seconds before retry ${attempt + 1}...`);
+        await sleep(TOKEN_RETRY_DELAY_MS);
+      }
     }
-    
-    console.error("[Egixia] Token request failed:", err.message);
-    console.error("[Egixia] HTTP Status:", httpStatus);
-    console.error("[Egixia] Response data:", err.response?.data);
-    console.error("[Egixia] Response headers:", err.response?.headers);
-    cachedToken = null;
-    tokenExpiry = 0;
-    throw new Error(`Error al obtener token: ${err.message}`);
   }
+
+  // All retries exhausted
+  cachedToken = null;
+  tokenExpiry = 0;
+  console.error(`[Egixia] All ${MAX_TOKEN_RETRIES} token attempts failed. Last error:`, lastError?.message);
+  throw new Error("COMMUNICATION_FAILURE_TOKEN");
 }
 
 async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", body?: any, clientKey?: string, retryOn401 = true): Promise<any> {
@@ -168,6 +188,9 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
 
   let responseData: any;
   let status = "success";
+
+  // Normalize endpoint key for failure tracking (strip query params)
+  const endpointKey = endpoint.split('?')[0];
 
   try {
     const response = await axios({
@@ -189,6 +212,8 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
+    // Reset failure counter on success
+    endpointFailureCount[endpointKey] = 0;
     responseData = response.data;
     return response.data;
   } catch (err: any) {
@@ -211,7 +236,19 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
       throw new Error(`Hacen falta permisos para ejecutar el servicio ${serviceName}`);
     }
     
-    console.error(`[Egixia] API call failed:`, err.message);
+    // Track consecutive failures per endpoint
+    endpointFailureCount[endpointKey] = (endpointFailureCount[endpointKey] || 0) + 1;
+    const failCount = endpointFailureCount[endpointKey];
+    console.error(`[Egixia] API call failed (${failCount} consecutive failures):`, err.message);
+    
+    if (failCount >= MAX_CONSECUTIVE_FAILURES) {
+      console.error(`[Egixia] ${MAX_CONSECUTIVE_FAILURES} consecutive failures on ${endpointKey}, triggering communication failure alert`);
+      endpointFailureCount[endpointKey] = 0; // Reset counter after alert
+      status = "error";
+      responseData = { error: err.message, code: err.code, status: httpStatus };
+      throw new Error("COMMUNICATION_FAILURE_SERVICE");
+    }
+
     status = err.code === 'ECONNABORTED' ? "timeout" : "error";
     responseData = { error: err.message, code: err.code, status: httpStatus };
     throw new Error(`Error en llamada a API: ${err.message}`);

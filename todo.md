@@ -465,3 +465,24 @@
 
 ## Timeout de Servicios
 - [x] Ampliado timeout de todos los servicios HTTP a 70000ms (getToken, callEgixiaApi, testConnection)
+
+## Reintentos y Popup de Alerta de Comunicación
+
+### getToken - Reintentos con espera
+- [x] Implementar 4 reintentos en getToken con 5 segundos de espera entre cada intento
+- [x] Si los 4 intentos fallan: lanzar error especial COMMUNICATION_FAILURE_TOKEN
+- [x] Frontend: mostrar popup bloqueante con mensaje de falla de comunicación
+
+### callEgixiaApi - Detección de fallos consecutivos
+- [x] Agregar contador de fallos consecutivos por endpoint en memoria del servidor (endpointFailureCount)
+- [x] Si el mismo endpoint falla 10 veces consecutivas: lanzar error COMMUNICATION_FAILURE_SERVICE
+- [x] Reiniciar contador cuando el endpoint tiene éxito
+
+### Popup de Alerta Bloqueante
+- [x] Crear componente CommunicationFailureDialog en frontend
+- [x] Mensaje token: "Tenemos falla de comunicación con la autenticación del servicio, espere 10 minutos e intente de nuevo"
+- [x] Mensaje servicio: "Se detectaron múltiples fallos consecutivos en la comunicación con el servicio. Espere 10 minutos e intente de nuevo."
+- [x] Botón "Entendido" para cerrar el popup
+- [x] Integrado en useOCVerification para capturar errores COMMUNICATION_FAILURE_TOKEN y COMMUNICATION_FAILURE_SERVICE
+- [x] Integrado en Home.tsx mediante window.__showCommFailure para comunicación entre hook y componente
+- [x] 19 tests pasando
