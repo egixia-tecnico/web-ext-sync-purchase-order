@@ -462,3 +462,6 @@
 
 ## Corrección: synchronizeBatch sin filtro de estado
 - [x] Removido filtro de status !== "synced" en synchronizeBatch: ahora envía TODAS las OC seleccionadas al servicio sin importar el estado
+
+## Timeout de Servicios
+- [x] Ampliado timeout de todos los servicios HTTP a 70000ms (getToken, callEgixiaApi, testConnection)

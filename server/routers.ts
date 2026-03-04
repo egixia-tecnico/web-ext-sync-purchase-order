@@ -96,7 +96,7 @@ async function getToken(baseUrl: string, userName: string, password: string, cli
           "Content-Type": "application/json",
           "User-Agent": "PostmanRuntime/7.51.1"
         }, 
-        timeout: 30000 
+        timeout: 70000 
       }
     );
 
@@ -179,7 +179,7 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
         "User-Agent": "PostmanRuntime/7.51.1"
       },
       data: body,
-      timeout: 30000,
+      timeout: 70000,
     });
 
     if (response.status !== 200) {
@@ -815,7 +815,7 @@ export const appRouter = router({
         };
         const requestHeaders = { "Content-Type": "application/json" };
         const MAX_RETRIES = 3;
-        const TIMEOUT_MS = 60000;
+        const TIMEOUT_MS = 70000;
         let lastError: any = null;
         let lastResponse: any = null;
         let attempts = 0;
