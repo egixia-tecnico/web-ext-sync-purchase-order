@@ -452,3 +452,10 @@
 
 ## Seguridad - Grilla de Clientes
 - [x] Eliminadas columnas Contraseña y Client Secret de la grilla de gestión de clientes
+
+## Confirmación de Re-sincronización de OC Sincronizadas
+- [x] Detectar si hay OC en estado "synced" dentro de la selección antes de sincronizar
+- [x] Mostrar AlertDialog con mensaje personalizado indicando cantidad de OC sincronizadas y advertencia de estado Actualizado
+- [x] Si confirma: proceder con la sincronización de todas las seleccionadas (incluyendo las ya sincronizadas)
+- [x] Si cancela: no ejecutar ninguna sincronización
+- [x] 19 tests pasando
