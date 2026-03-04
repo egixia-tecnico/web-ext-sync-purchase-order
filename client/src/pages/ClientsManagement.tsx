@@ -153,9 +153,7 @@ export default function ClientsManagement() {
                 <TableHead>Cliente</TableHead>
                 <TableHead>Dominio Base</TableHead>
                 <TableHead>Usuario</TableHead>
-                <TableHead>Contraseña</TableHead>
                 <TableHead>Client ID</TableHead>
-                <TableHead>Client Secret</TableHead>
                 <TableHead className="w-24">Color</TableHead>
                 <TableHead className="w-32 text-right">Acciones</TableHead>
               </TableRow>
@@ -182,13 +180,7 @@ export default function ClientsManagement() {
                   <TableCell className="text-sm text-muted-foreground">{client.baseUrl}</TableCell>
                   <TableCell className="text-sm">{client.userName}</TableCell>
                   <TableCell className="text-sm font-mono text-muted-foreground">
-                    {client.password}
-                  </TableCell>
-                  <TableCell className="text-sm font-mono text-muted-foreground">
                     {client.clientId}
-                  </TableCell>
-                  <TableCell className="text-sm font-mono text-muted-foreground">
-                    {client.clientSecret}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">

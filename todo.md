@@ -449,3 +449,6 @@
 - [x] Agregado indicador de sesión activa (email) en header de ClientsManagement
 - [x] Clientes solo se cargan si hay sesión admin activa (query enabled)
 - [x] 19 tests pasando
+
+## Seguridad - Grilla de Clientes
+- [x] Eliminadas columnas Contraseña y Client Secret de la grilla de gestión de clientes
