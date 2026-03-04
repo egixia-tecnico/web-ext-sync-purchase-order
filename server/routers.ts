@@ -316,7 +316,8 @@ export const appRouter = router({
         await markMagicLinkAsUsed(token);
         
         // Create admin session (set cookie with email)
-        const sessionData = JSON.stringify({ email: magicLink.email, isAdmin: true });
+        // URL-encode the JSON value to avoid issues with special characters in cookie values
+        const sessionData = encodeURIComponent(JSON.stringify({ email: magicLink.email, isAdmin: true }));
         const isProduction = process.env.NODE_ENV === "production";
         const secureCookie = isProduction ? "; Secure" : "";
         ctx.res.setHeader(
@@ -337,12 +338,15 @@ export const appRouter = router({
       }
       
       try {
-        const sessionData = JSON.parse(adminSessionMatch[1]);
+        // Decode URL-encoded cookie value before parsing JSON
+        const rawValue = decodeURIComponent(adminSessionMatch[1]);
+        const sessionData = JSON.parse(rawValue);
         if (sessionData.isAdmin && sessionData.email && sessionData.email.endsWith("@egixia.com")) {
           return { isAdmin: true, email: sessionData.email };
         }
       } catch (e) {
-        // Invalid session data
+        // Invalid session data - log for debugging
+        console.warn("[checkAdminSession] Failed to parse session cookie:", adminSessionMatch[1], e);
       }
       
       return { isAdmin: false, email: null };

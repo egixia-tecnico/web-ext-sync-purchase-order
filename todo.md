@@ -440,3 +440,12 @@
 - [x] Agregar useEffect en Home.tsx para abrir modales automáticamente con openHistory/openLogs
 - [x] Indicador visual en menú: punto verde (sesión activa) o aviso ámbar (requiere @egixia.com)
 - [x] 19 tests pasando
+
+## Corrección Control de Sesión Admin
+
+- [x] Diagnosticado: cookie admin_session con JSON sin URL-encode causaba fallo en parse
+- [x] Corregido: encodeURIComponent al guardar + decodeURIComponent al leer la cookie
+- [x] Protegida ruta /clients: redirige a /admin/login si no hay sesión admin activa
+- [x] Agregado indicador de sesión activa (email) en header de ClientsManagement
+- [x] Clientes solo se cargan si hay sesión admin activa (query enabled)
+- [x] 19 tests pasando

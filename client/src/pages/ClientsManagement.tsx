@@ -35,15 +35,30 @@ export default function ClientsManagement() {
   const [editingClientId, setEditingClientId] = useState<number | null>(null);
   const [deletingClientId, setDeletingClientId] = useState<number | null>(null);
 
-  // WORKAROUND: permitir acceso sin validación de sesión
-  // TODO: Diagnosticar y solucionar error React #310 en flujo de magic link
   // IMPORTANTE: Todas las queries y mutations DEBEN estar antes de cualquier early return
-  const { data: clients, isLoading, refetch } = trpc.clients.list.useQuery();
+  // para cumplir con las reglas de hooks de React
+  const { data: adminSession, isLoading: sessionLoading } = trpc.auth.checkAdminSession.useQuery(undefined, {
+    retry: false,
+    staleTime: 30_000,
+  });
+  const { data: clients, isLoading: clientsLoading, refetch } = trpc.clients.list.useQuery(undefined, {
+    // Solo cargar clientes si hay sesión admin activa
+    enabled: adminSession?.isAdmin === true,
+  });
   const setActiveMutation = trpc.clients.setActive.useMutation();
   const deleteMutation = trpc.clients.delete.useMutation();
 
-  // Show loading while fetching clients
-  if (isLoading) {
+  const isLoading = sessionLoading || clientsLoading;
+
+  // Redirigir al login si no hay sesión admin activa
+  useEffect(() => {
+    if (!sessionLoading && adminSession?.isAdmin !== true) {
+      setLocation("/admin/login?returnPath=%2Fclients");
+    }
+  }, [sessionLoading, adminSession, setLocation]);
+
+  // Show loading while checking session or fetching clients
+  if (sessionLoading || (adminSession?.isAdmin && clientsLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
@@ -100,6 +115,12 @@ export default function ClientsManagement() {
           <p className="text-sm text-muted-foreground mt-1">
             Configure los clientes y sus credenciales de acceso al servicio
           </p>
+          {adminSession?.email && (
+            <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+              Sesión activa: {adminSession.email}
+            </p>
+          )}
         </div>
         <Button onClick={handleCreate}>
           <Plus className="w-4 h-4 mr-2" />
