@@ -116,12 +116,12 @@ export function useOCVerification() {
     // Use selected records if no specific records provided
     const targets = recordsToSync || records.filter(r => selectedRecords.has(r.id));
     
-    // Filter out already synced records
-    const toSync = targets.filter(r => r.status !== "synced");
+    // Send ALL selected records regardless of status (user confirmed re-sync if needed)
+    const toSync = targets;
     
     if (toSync.length === 0) {
-      toast.warning("No hay registros pendientes de sincronización", { position: "bottom-left" });
-      return { success: 0, failed: 0, skipped: targets.length - toSync.length };
+      toast.warning("No hay registros seleccionados para sincronizar", { position: "bottom-left" });
+      return { success: 0, failed: 0, skipped: 0 };
     }
 
     setIsProcessing(true);
@@ -176,7 +176,7 @@ export function useOCVerification() {
       toast.error(`0 de ${total} órdenes sincronizadas`, { position: "bottom-left", duration: 5000 });
     }
 
-    return { success: successCount, failed: failedCount, skipped: targets.length - toSync.length };
+    return { success: successCount, failed: failedCount, skipped: 0 };
   }, [records, selectedRecords, updateRecord, updateRecordsBatch, setIsProcessing, setProgress, synchronizeMutation, verifyBatch, clientKey]);
 
   return { verifyBatch, synchronizeBatch };

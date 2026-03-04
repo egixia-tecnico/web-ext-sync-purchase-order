@@ -459,3 +459,6 @@
 - [x] Si confirma: proceder con la sincronización de todas las seleccionadas (incluyendo las ya sincronizadas)
 - [x] Si cancela: no ejecutar ninguna sincronización
 - [x] 19 tests pasando
+
+## Corrección: synchronizeBatch sin filtro de estado
+- [x] Removido filtro de status !== "synced" en synchronizeBatch: ahora envía TODAS las OC seleccionadas al servicio sin importar el estado
