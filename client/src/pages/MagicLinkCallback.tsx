@@ -5,17 +5,30 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+/**
+ * Determina el texto descriptivo del destino según el returnPath.
+ * Permite mensajes más amigables en la pantalla de éxito.
+ */
+function getDestinationLabel(returnPath: string): string {
+  if (returnPath === "/clients") return "Gestión de Clientes";
+  if (returnPath.includes("openHistory=true")) return "Historial de Verificaciones";
+  if (returnPath.includes("openLogs=true")) return "Log de Integraciones";
+  return "la aplicación";
+}
+
 export default function MagicLinkCallback() {
   const [, setLocation] = useLocation();
-  const [token, setToken] = useState<string | null>(null);
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState("");
+  const [destinationLabel, setDestinationLabel] = useState("la aplicación");
 
   const validateMagicLink = trpc.auth.validateMagicLink.useMutation({
     onSuccess: (data) => {
       setStatus("success");
-      // Redirect to returnPath or default to /clients after 2 seconds
+      // Usar returnPath guardado en la BD, o fallback a /clients
       const targetPath = data.returnPath || "/clients";
+      setDestinationLabel(getDestinationLabel(targetPath));
+      // Redirigir después de 2 segundos para que el usuario vea el mensaje de éxito
       setTimeout(() => {
         setLocation(targetPath);
       }, 2000);
@@ -27,17 +40,15 @@ export default function MagicLinkCallback() {
   });
 
   useEffect(() => {
-    // Get token from URL query params
     const params = new URLSearchParams(window.location.search);
     const tokenParam = params.get("token");
-    
+
     if (!tokenParam) {
       setStatus("error");
       setErrorMessage("Token no encontrado en la URL");
       return;
     }
 
-    setToken(tokenParam);
     validateMagicLink.mutate({ token: tokenParam });
   }, []);
 
@@ -63,7 +74,7 @@ export default function MagicLinkCallback() {
               <div className="text-center space-y-2">
                 <p className="font-semibold text-green-800">¡Acceso Autorizado!</p>
                 <p className="text-sm text-muted-foreground">
-                  Redirigiendo a Gestión de Clientes...
+                  Redirigiendo a {destinationLabel}...
                 </p>
               </div>
             </>

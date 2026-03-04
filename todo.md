@@ -427,3 +427,16 @@
 - [x] Actualizar AdminLogin para leer returnPath de URL y enviarlo en sendMagicLink
 - [x] Modificar opción "Gestión de Clientes" en AppHeader para redirigir a /admin/login?returnPath=/clients
 - [ ] Probar flujo completo: clic en menú → correo → clic en enlace → página de clientes
+
+## Control de Acceso en Engranaje del Header
+
+- [x] Verificar sesión admin activa usando trpc.auth.checkAdminSession en AppHeader
+- [x] Si NO hay sesión: redirigir a /admin/login?returnPath=<ruta_destino> según opción seleccionada
+- [x] Si SÍ hay sesión: mostrar menú normalmente y navegar a la ruta destino
+- [x] Gestión de Clientes → returnPath=/clients
+- [x] Historial de Verificaciones → returnPath=/?openHistory=true
+- [x] Log de Integraciones → returnPath=/?openLogs=true
+- [x] Actualizar MagicLinkCallback con etiqueta descriptiva del destino
+- [x] Agregar useEffect en Home.tsx para abrir modales automáticamente con openHistory/openLogs
+- [x] Indicador visual en menú: punto verde (sesión activa) o aviso ámbar (requiere @egixia.com)
+- [x] 19 tests pasando

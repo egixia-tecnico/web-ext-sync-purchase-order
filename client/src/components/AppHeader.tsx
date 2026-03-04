@@ -2,17 +2,21 @@
  * AppHeader - Header de la Mini App con branding Egixia
  * Design: "Operational Clarity" - barra superior con color primario configurable
  * Incluye indicador de estado de conexión y menú desplegable
+ * 
+ * Control de acceso: El menú de engranaje solo es accesible con sesión @egixia.com activa.
+ * Si no hay sesión, al hacer clic en cualquier opción redirige al login por correo.
  */
 import { useThemeColor } from "@/contexts/ThemeColorContext";
 import { useOCSync } from "@/contexts/OCSyncContext";
 import { Settings2, RefreshCw, Wifi, WifiOff, Loader2, History, ChevronDown, Users, FileText } from "lucide-react";
 import { motion } from "framer-motion";
-import { useState } from "react";
 import { useLocation } from "wouter";
+import { trpc } from "@/lib/trpc";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -26,6 +30,40 @@ export default function AppHeader({ onHistoryClick, onLogsClick }: AppHeaderProp
   const { r, g, b } = primaryRgb;
   const { connectionStatus } = useOCSync();
   const [, navigate] = useLocation();
+
+  // Verificar sesión admin activa
+  const { data: adminSession } = trpc.auth.checkAdminSession.useQuery(undefined, {
+    retry: false,
+    staleTime: 30_000, // revalidar cada 30 segundos
+  });
+
+  const isAdmin = adminSession?.isAdmin === true;
+
+  /**
+   * Navegar a una ruta protegida.
+   * Si hay sesión admin activa: navega directamente.
+   * Si NO hay sesión: redirige al login con returnPath para volver después de autenticarse.
+   */
+  const handleProtectedNav = (targetPath: string, returnPath: string) => {
+    if (isAdmin) {
+      navigate(targetPath);
+    } else {
+      navigate(`/admin/login?returnPath=${encodeURIComponent(returnPath)}`);
+    }
+  };
+
+  /**
+   * Ejecutar acción protegida (para modales como historial y logs).
+   * Si hay sesión admin activa: ejecuta la acción directamente.
+   * Si NO hay sesión: redirige al login con returnPath especial.
+   */
+  const handleProtectedAction = (action: () => void, returnPath: string) => {
+    if (isAdmin) {
+      action();
+    } else {
+      navigate(`/admin/login?returnPath=${encodeURIComponent(returnPath)}`);
+    }
+  };
 
   return (
     <motion.header
@@ -84,30 +122,56 @@ export default function AppHeader({ onHistoryClick, onLogsClick }: AppHeaderProp
             Powered by Egixia
           </span>
           
-          {/* Dropdown menu */}
+          {/* Dropdown menu - requiere sesión @egixia.com */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 className="p-2 rounded-lg hover:bg-white/15 transition-colors text-white/80 hover:text-white flex items-center gap-1"
-                title="Menú"
+                title={isAdmin ? "Menú de administración" : "Acceso restringido - requiere cuenta @egixia.com"}
               >
                 <Settings2 className="w-4 h-4" />
                 <ChevronDown className="w-3 h-3" />
+                {/* Indicador visual de sesión activa */}
+                {isAdmin && (
+                  <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-green-400" />
+                )}
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onClick={() => navigate("/admin/login?returnPath=/clients")} className="cursor-pointer">
+              {/* Indicador de estado de autenticación */}
+              {isAdmin ? (
+                <div className="px-2 py-1.5 text-[10px] text-muted-foreground flex items-center gap-1.5 border-b mb-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+                  Sesión activa: {adminSession?.email}
+                </div>
+              ) : (
+                <div className="px-2 py-1.5 text-[10px] text-amber-600 flex items-center gap-1.5 border-b mb-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
+                  Requiere cuenta @egixia.com
+                </div>
+              )}
+
+              <DropdownMenuItem
+                onClick={() => handleProtectedNav("/clients", "/clients")}
+                className="cursor-pointer"
+              >
                 <Users className="w-4 h-4 mr-2" />
                 Gestión de Clientes
               </DropdownMenuItem>
 
-              <DropdownMenuItem onClick={onHistoryClick} className="cursor-pointer">
+              <DropdownMenuItem
+                onClick={() => handleProtectedAction(onHistoryClick, "/?openHistory=true")}
+                className="cursor-pointer"
+              >
                 <History className="w-4 h-4 mr-2" />
                 Historial de Verificaciones
               </DropdownMenuItem>
 
               {onLogsClick && (
-                <DropdownMenuItem onClick={onLogsClick} className="cursor-pointer">
+                <DropdownMenuItem
+                  onClick={() => handleProtectedAction(onLogsClick, "/?openLogs=true")}
+                  className="cursor-pointer"
+                >
                   <FileText className="w-4 h-4 mr-2" />
                   Log de Integraciones
                 </DropdownMenuItem>

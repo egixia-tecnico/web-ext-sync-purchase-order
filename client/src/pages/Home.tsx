@@ -34,6 +34,23 @@ export default function Home() {
 
   const [showHistory, setShowHistory] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
+
+  // Abrir modales automáticamente si returnPath contiene parámetros especiales
+  // Esto ocurre cuando el usuario llega desde el magic link con openHistory=true o openLogs=true
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("openHistory") === "true") {
+      setShowHistory(true);
+      // Limpiar el parámetro de la URL sin recargar la página
+      const newUrl = window.location.pathname + (window.location.search.replace(/[?&]openHistory=true/, "") || "");
+      window.history.replaceState({}, "", newUrl);
+    }
+    if (params.get("openLogs") === "true") {
+      setShowLogs(true);
+      const newUrl = window.location.pathname + (window.location.search.replace(/[?&]openLogs=true/, "") || "");
+      window.history.replaceState({}, "", newUrl);
+    }
+  }, []);
   const { records, connectionStatus, connectionError, setConnectionStatus, setConnectionError, currentStep } = useOCSync();
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
