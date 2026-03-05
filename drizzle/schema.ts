@@ -51,6 +51,8 @@ export const clients = mysqlTable("clients", {
   clientSecret: varchar("clientSecret", { length: 512 }).notNull(), // plain text
   primaryColor: varchar("primaryColor", { length: 7 }).notNull().default("#10b981"), // hex color
   syncRules: text("syncRules"), // business rules for synchronization (optional)
+  batchSize: int("batchSize").notNull().default(10), // number of concurrent requests per batch
+  batchDelaySeconds: int("batchDelaySeconds").notNull().default(3), // seconds to wait between batches
   isActive: boolean("isActive").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

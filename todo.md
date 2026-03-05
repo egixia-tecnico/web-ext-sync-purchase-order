@@ -486,3 +486,31 @@
 - [x] Integrado en useOCVerification para capturar errores COMMUNICATION_FAILURE_TOKEN y COMMUNICATION_FAILURE_SERVICE
 - [x] Integrado en Home.tsx mediante window.__showCommFailure para comunicación entre hook y componente
 - [x] 19 tests pasando
+
+## Configuración de Procesamiento por Lotes
+
+### Schema y Base de Datos
+- [x] Agregar campo batch_size (int, default 10) a tabla egixiaClients
+- [x] Agregar campo batch_delay_seconds (int, default 3) a tabla egixiaClients
+- [x] Ejecutar db:push para aplicar migración
+
+### Formulario de Clientes
+- [x] Agregar campos "Tamaño de lote" y "Tiempo de espera entre lotes (seg)" al formulario de crear/editar cliente
+- [x] Valores por defecto: lote=10, espera=3 segundos
+- [x] Validación: lote mínimo 1, máximo 100; espera mínimo 1, máximo 60
+
+### Backend - Procesamiento por Lotes
+- [x] Modificar verifyPurchaseOrders para procesar OC en lotes según batch_size del cliente
+- [x] Agregar delay de batch_delay_seconds entre cada lote de verificación de OC
+- [x] Extraer función helper checkSupplierExists para reutilización
+- [x] Crear endpoint synchronizeBatch para sincronización por lotes con delay
+- [x] getClientCredentials retorna batchSize y batchDelaySeconds
+
+### Frontend - Progreso por Lotes
+- [x] Actualizar useOCVerification para usar synchronizeBatch en vez de llamadas individuales
+- [x] Mostrar info de lotes en toast de resultados (ej: "5 lotes de 10")
+- [x] Columna "Lotes" en tabla de ClientsManagement
+- [x] clients.list retorna batchSize y batchDelaySeconds
+
+### Tests
+- [x] 24 tests pasando (batch.test.ts: 5 tests nuevos)

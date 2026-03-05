@@ -32,6 +32,8 @@ async function getClientCredentials(clientKey?: string): Promise<{
   clientName?: string;
   primaryColor: string;
   syncRules?: string | null;
+  batchSize: number;
+  batchDelaySeconds: number;
 } | null> {
   console.log("[getClientCredentials] Called with clientKey:", clientKey);
   
@@ -53,6 +55,8 @@ async function getClientCredentials(clientKey?: string): Promise<{
         clientName: client.name,
         primaryColor: client.primaryColor,
         syncRules: client.syncRules,
+        batchSize: client.batchSize ?? 10,
+        batchDelaySeconds: client.batchDelaySeconds ?? 3,
       };
     }
     throw new Error(`No se encontró cliente con clientKey: ${clientKey}`);
@@ -75,6 +79,8 @@ async function getClientCredentials(clientKey?: string): Promise<{
       clientName: activeClient.name,
       primaryColor: activeClient.primaryColor,
       syncRules: activeClient.syncRules,
+      batchSize: activeClient.batchSize ?? 10,
+      batchDelaySeconds: activeClient.batchDelaySeconds ?? 3,
     };
   }
 
@@ -271,6 +277,67 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
   }
 }
 
+/**
+ * Helper: Check if supplier exists for an order that was not found in the portal
+ */
+async function checkSupplierExists(
+  order: { purchaseOrderId: string; providerExternalCode1: string; providerExternalCode2?: string; buyerCode?: string },
+  clientKey?: string
+) {
+  try {
+    const supplierExists = await callEgixiaApi(
+      `/ApiManager/suppliers_v3/supplier_exists`,
+      "POST",
+      [{
+        provider_external_code_1: order.providerExternalCode1,
+        provider_external_code_2: order.providerExternalCode2 || "",
+        provider_external_code_3: ""
+      }],
+      clientKey
+    );
+
+    if (!supplierExists?.outlist_provider || supplierExists.outlist_provider.length === 0) {
+      return {
+        purchaseOrderId: order.purchaseOrderId,
+        providerExternalCode1: order.providerExternalCode1,
+        providerExternalCode2: order.providerExternalCode2 || "",
+        buyerCode: order.buyerCode,
+        status: "error",
+        syncStatus: null,
+        error: "Respuesta inv\u00e1lida del servicio de verificaci\u00f3n de proveedor",
+      };
+    } else if (supplierExists.outlist_provider[0]?.provider_exists === true) {
+      return {
+        purchaseOrderId: order.purchaseOrderId,
+        providerExternalCode1: order.providerExternalCode1,
+        providerExternalCode2: order.providerExternalCode2 || "",
+        buyerCode: order.buyerCode,
+        status: "not_found",
+        syncStatus: null,
+      };
+    } else {
+      return {
+        purchaseOrderId: order.purchaseOrderId,
+        providerExternalCode1: order.providerExternalCode1,
+        providerExternalCode2: order.providerExternalCode2 || "",
+        buyerCode: order.buyerCode,
+        status: "supplier_not_exists",
+        syncStatus: null,
+      };
+    }
+  } catch (error: any) {
+    return {
+      purchaseOrderId: order.purchaseOrderId,
+      providerExternalCode1: order.providerExternalCode1,
+      providerExternalCode2: order.providerExternalCode2 || "",
+      buyerCode: order.buyerCode,
+      status: "error",
+      syncStatus: null,
+      error: error.message,
+    };
+  }
+}
+
 export const appRouter = router({
   system: systemRouter,
 
@@ -408,147 +475,91 @@ export const appRouter = router({
         if (input.clientKey) {
           await deleteIntegrationLogsByClientKey(input.clientKey);
         }
-        
-        const results = [];
-        for (const order of input.orders) {
-          try {
-            const data = await callEgixiaApi(
-              `/apimanager/purchase_order_v1/list?buyer_external_code=${order.buyerCode}&purchase_order_number=${order.purchaseOrderId}`,
-              "GET",
-              undefined,
-              input.clientKey
-            );
 
-            // Check if order is synchronized (SDTOrdenesCompra has data)
-            // Verify exact match of buyer_external_code and purchase_order_number
-            if (data && data.SDTOrdenesCompra && Array.isArray(data.SDTOrdenesCompra) && data.SDTOrdenesCompra.length > 0) {
-              const orderData = data.SDTOrdenesCompra.find(
-                (oc: any) => 
-                  oc.buyer_external_code === order.buyerCode && 
-                  oc.purchase_order_number === order.purchaseOrderId
-              );
-              
-              if (orderData) {
-                // OC found and synchronized - NO need to check supplier
-                results.push({
-                  purchaseOrderId: order.purchaseOrderId,
-                  providerExternalCode1: order.providerExternalCode1,
-                  providerExternalCode2: order.providerExternalCode2 || "",
-                  providerExternalCode3: orderData.provider_external_code3 || "",
-                  buyerCode: order.buyerCode,
-                  buyerName: orderData.buyer_name || null,
-                  providerName: orderData.provider_name || null,
-                  status: "found", // Order is synchronized
-                  syncStatus: "synchronized",
-                  documentDate: orderData.document_date || null,
-                  synchronizationDate: orderData.synchronization_date || null,
-                  deliveryStatus: orderData.delivery_status || null,
-                  canceled: orderData.canceled || null,
-                  updated: orderData.updated || null,
-                });
-              } else {
-                // Response has data but no exact match - treat as not found
-                // Check if supplier exists
-                const supplierExists = await callEgixiaApi(
-                  `/ApiManager/suppliers_v3/supplier_exists`,
-                  "POST",
-                  [{
-                    provider_external_code_1: order.providerExternalCode1,
-                    provider_external_code_2: order.providerExternalCode2 || "",
-                    provider_external_code_3: ""
-                  }],
-                  input.clientKey
-                );
+        // Get batch configuration from client
+        const credentials = await getClientCredentials(input.clientKey);
+        const batchSize = credentials?.batchSize ?? 10;
+        const batchDelaySeconds = credentials?.batchDelaySeconds ?? 3;
 
-                if (!supplierExists?.outlist_provider || supplierExists.outlist_provider.length === 0) {
-                  // Invalid response from supplier_exists endpoint
-                  results.push({
-                    purchaseOrderId: order.purchaseOrderId,
-                    providerExternalCode1: order.providerExternalCode1,
-                    providerExternalCode2: order.providerExternalCode2 || "",
-                    buyerCode: order.buyerCode,
-                    status: "error",
-                    syncStatus: null,
-                    error: "Respuesta inválida del servicio de verificación de proveedor",
-                  });
-                } else if (supplierExists.outlist_provider[0]?.provider_exists === true) {
-                  results.push({
-                    purchaseOrderId: order.purchaseOrderId,
-                    providerExternalCode1: order.providerExternalCode1,
-                    providerExternalCode2: order.providerExternalCode2 || "",
-                    buyerCode: order.buyerCode,
-                    status: "not_found",
-                    syncStatus: null,
-                  });
-                } else {
-                  results.push({
-                    purchaseOrderId: order.purchaseOrderId,
-                    providerExternalCode1: order.providerExternalCode1,
-                    providerExternalCode2: order.providerExternalCode2 || "",
-                    buyerCode: order.buyerCode,
-                    status: "supplier_not_exists",
-                    syncStatus: null,
-                  });
-                }
-              }
-            } else {
-              // Order not found - check if supplier exists
-              const supplierExists = await callEgixiaApi(
-                `/ApiManager/suppliers_v3/supplier_exists`,
-                "POST",
-                [{
-                  provider_external_code_1: order.providerExternalCode1,
-                  provider_external_code_2: order.providerExternalCode2 || "",
-                  provider_external_code_3: ""
-                }],
+        console.log(`[Egixia] Batch verification: ${input.orders.length} orders, batchSize=${batchSize}, delay=${batchDelaySeconds}s`);
+
+        const results: any[] = [];
+
+        // Split orders into batches
+        const totalBatches = Math.ceil(input.orders.length / batchSize);
+
+        for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+          const batchStart = batchIndex * batchSize;
+          const batchEnd = Math.min(batchStart + batchSize, input.orders.length);
+          const batch = input.orders.slice(batchStart, batchEnd);
+
+          console.log(`[Egixia] Processing verification batch ${batchIndex + 1}/${totalBatches} (${batch.length} orders)`);
+
+          // Process each order in the batch sequentially
+          for (const order of batch) {
+            try {
+              const data = await callEgixiaApi(
+                `/apimanager/purchase_order_v1/list?buyer_external_code=${order.buyerCode}&purchase_order_number=${order.purchaseOrderId}`,
+                "GET",
+                undefined,
                 input.clientKey
               );
 
-              if (!supplierExists?.outlist_provider || supplierExists.outlist_provider.length === 0) {
-                // Invalid response from supplier_exists endpoint
-                results.push({
-                  purchaseOrderId: order.purchaseOrderId,
-                  providerExternalCode1: order.providerExternalCode1,
-                  providerExternalCode2: order.providerExternalCode2 || "",
-                  buyerCode: order.buyerCode,
-                  status: "error",
-                  syncStatus: null,
-                  error: "Respuesta inválida del servicio de verificación de proveedor",
-                });
-              } else if (supplierExists.outlist_provider[0]?.provider_exists === true) {
-                results.push({
-                  purchaseOrderId: order.purchaseOrderId,
-                  providerExternalCode1: order.providerExternalCode1,
-                  providerExternalCode2: order.providerExternalCode2 || "",
-                  buyerCode: order.buyerCode,
-                  status: "not_found",
-                  syncStatus: null,
-                });
+              // Check if order is synchronized (SDTOrdenesCompra has data)
+              if (data && data.SDTOrdenesCompra && Array.isArray(data.SDTOrdenesCompra) && data.SDTOrdenesCompra.length > 0) {
+                const orderData = data.SDTOrdenesCompra.find(
+                  (oc: any) =>
+                    oc.buyer_external_code === order.buyerCode &&
+                    oc.purchase_order_number === order.purchaseOrderId
+                );
+
+                if (orderData) {
+                  results.push({
+                    purchaseOrderId: order.purchaseOrderId,
+                    providerExternalCode1: order.providerExternalCode1,
+                    providerExternalCode2: order.providerExternalCode2 || "",
+                    providerExternalCode3: orderData.provider_external_code3 || "",
+                    buyerCode: order.buyerCode,
+                    buyerName: orderData.buyer_name || null,
+                    providerName: orderData.provider_name || null,
+                    status: "found",
+                    syncStatus: "synchronized",
+                    documentDate: orderData.document_date || null,
+                    synchronizationDate: orderData.synchronization_date || null,
+                    deliveryStatus: orderData.delivery_status || null,
+                    canceled: orderData.canceled || null,
+                    updated: orderData.updated || null,
+                  });
+                } else {
+                  // No exact match - check supplier
+                  const supplierResult = await checkSupplierExists(order, input.clientKey);
+                  results.push(supplierResult);
+                }
               } else {
-                results.push({
-                  purchaseOrderId: order.purchaseOrderId,
-                  providerExternalCode1: order.providerExternalCode1,
-                  providerExternalCode2: order.providerExternalCode2 || "",
-                  buyerCode: order.buyerCode,
-                  status: "supplier_not_exists",
-                  syncStatus: null,
-                });
+                // Order not found - check supplier
+                const supplierResult = await checkSupplierExists(order, input.clientKey);
+                results.push(supplierResult);
               }
+            } catch (error: any) {
+              results.push({
+                purchaseOrderId: order.purchaseOrderId,
+                providerExternalCode1: order.providerExternalCode1,
+                providerExternalCode2: order.providerExternalCode2 || "",
+                buyerCode: order.buyerCode,
+                status: "error",
+                syncStatus: null,
+                error: error.message,
+              });
             }
-          } catch (error: any) {
-            results.push({
-              purchaseOrderId: order.purchaseOrderId,
-              providerExternalCode1: order.providerExternalCode1,
-              providerExternalCode2: order.providerExternalCode2 || "",
-              buyerCode: order.buyerCode,
-              status: "error",
-              syncStatus: null,
-              error: error.message,
-            });
+          }
+
+          // Wait between batches (except after the last batch)
+          if (batchIndex < totalBatches - 1) {
+            console.log(`[Egixia] Waiting ${batchDelaySeconds}s before next batch...`);
+            await sleep(batchDelaySeconds * 1000);
           }
         }
 
-        const credentials = await getClientCredentials(input.clientKey);
         const summary = {
           total: results.length,
           found: results.filter((r) => r.status === "found").length,
@@ -579,6 +590,11 @@ export const appRouter = router({
         return {
           results,
           summary,
+          batchInfo: {
+            batchSize,
+            batchDelaySeconds,
+            totalBatches,
+          },
           clientInfo: credentials ? {
             name: credentials.clientName,
             primaryColor: credentials.primaryColor,
@@ -662,6 +678,136 @@ export const appRouter = router({
         }
       }),
 
+    // Batch synchronization endpoint - processes multiple OCs with batch delays
+    synchronizeBatch: publicProcedure
+      .input(z.object({
+        orders: z.array(z.object({
+          buyerExternalCode: z.string(),
+          purchaseOrderNumber: z.string(),
+          sendEmails: z.boolean().default(false),
+        })),
+        clientKey: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        // Get batch configuration from client
+        const credentials = await getClientCredentials(input.clientKey);
+        const batchSize = credentials?.batchSize ?? 10;
+        const batchDelaySeconds = credentials?.batchDelaySeconds ?? 3;
+
+        console.log(`[Egixia] Batch sync: ${input.orders.length} orders, batchSize=${batchSize}, delay=${batchDelaySeconds}s`);
+
+        const results: Array<{
+          purchaseOrderNumber: string;
+          buyerExternalCode: string;
+          success: boolean;
+          message?: string | null;
+          errorMessage?: string | null;
+          error?: string | null;
+          data?: any;
+        }> = [];
+
+        const totalBatches = Math.ceil(input.orders.length / batchSize);
+
+        for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+          const batchStart = batchIndex * batchSize;
+          const batchEnd = Math.min(batchStart + batchSize, input.orders.length);
+          const batch = input.orders.slice(batchStart, batchEnd);
+
+          console.log(`[Egixia] Processing sync batch ${batchIndex + 1}/${totalBatches} (${batch.length} orders)`);
+
+          for (const order of batch) {
+            try {
+              const data = await callEgixiaApi(
+                `/apimanager/purchase_order_v1/synchronize_purchase_order`,
+                "POST",
+                {
+                  buyer_external_code: order.buyerExternalCode,
+                  purchase_order_number: order.purchaseOrderNumber,
+                  send_emails: order.sendEmails,
+                },
+                input.clientKey
+              );
+
+              const seguimiento = data?.SDTSeguimineto;
+              if (!seguimiento) {
+                results.push({
+                  purchaseOrderNumber: order.purchaseOrderNumber,
+                  buyerExternalCode: order.buyerExternalCode,
+                  success: false,
+                  error: "Respuesta inv\u00e1lida del servidor (sin SDTSeguimineto)",
+                  data: null,
+                });
+                continue;
+              }
+
+              const isSuccess = (seguimiento.Actualizadas > 0 || seguimiento.Creadas > 0);
+              const hasError = (
+                seguimiento.ProveedorNoExiste > 0 ||
+                seguimiento.CompradorNoExiste > 0 ||
+                seguimiento.TotalOCs === 0 ||
+                seguimiento.AnuladasNoRegistradas > 0 ||
+                seguimiento.SinProveedor > 0
+              );
+
+              let errorMessage = null;
+              if (data.message && data.message.includes("Not found Buyer")) {
+                errorMessage = "No existe la empresa compradora, verifique que el n\u00famero contenga incluso los ceros a la izquierda en caso que aplique";
+              } else if (seguimiento.SinProveedor > 0) {
+                errorMessage = "La orden de compra trae el campo proveedor nulo";
+              } else if (seguimiento.ProveedorNoExiste > 0) {
+                errorMessage = "El proveedor no existe en el portal";
+              } else if (seguimiento.CompradorNoExiste > 0) {
+                errorMessage = "La empresa compradora no est\u00e1 configurada en la integraci\u00f3n o no existe";
+              } else if (seguimiento.AnuladasNoRegistradas > 0) {
+                errorMessage = "La orden de compra est\u00e1 100% anulada y no exist\u00eda previamente en el portal";
+              } else if (seguimiento.TotalOCs === 0) {
+                errorMessage = "No se encontr\u00f3 la orden de compra en el sistema origen";
+              }
+
+              results.push({
+                purchaseOrderNumber: order.purchaseOrderNumber,
+                buyerExternalCode: order.buyerExternalCode,
+                success: isSuccess && !hasError,
+                message: data.message || null,
+                errorMessage,
+                data: seguimiento,
+              });
+            } catch (error: any) {
+              results.push({
+                purchaseOrderNumber: order.purchaseOrderNumber,
+                buyerExternalCode: order.buyerExternalCode,
+                success: false,
+                error: error.message,
+                data: null,
+              });
+            }
+          }
+
+          // Wait between batches (except after the last batch)
+          if (batchIndex < totalBatches - 1) {
+            console.log(`[Egixia] Waiting ${batchDelaySeconds}s before next sync batch...`);
+            await sleep(batchDelaySeconds * 1000);
+          }
+        }
+
+        const successCount = results.filter(r => r.success).length;
+        const failedCount = results.filter(r => !r.success).length;
+
+        return {
+          results,
+          summary: {
+            total: results.length,
+            success: successCount,
+            failed: failedCount,
+          },
+          batchInfo: {
+            batchSize,
+            batchDelaySeconds,
+            totalBatches,
+          },
+        };
+      }),
+
     checkSupplier: publicProcedure
       .input(z.object({
         supplierCode: z.string(),
@@ -712,6 +858,8 @@ export const appRouter = router({
         clientSecret: client.clientSecret,
         primaryColor: client.primaryColor,
         syncRules: client.syncRules,
+        batchSize: client.batchSize ?? 10,
+        batchDelaySeconds: client.batchDelaySeconds ?? 3,
         isActive: client.isActive,
         createdAt: client.createdAt,
       }));
@@ -734,6 +882,8 @@ export const appRouter = router({
           clientSecret: client.clientSecret,
           primaryColor: client.primaryColor,
           syncRules: client.syncRules,
+          batchSize: client.batchSize,
+          batchDelaySeconds: client.batchDelaySeconds,
           isActive: client.isActive,
         };
       }),
@@ -749,6 +899,8 @@ export const appRouter = router({
         clientSecret: z.string().min(1),
         primaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
         syncRules: z.string().optional(),
+        batchSize: z.number().min(1).max(100).default(10),
+        batchDelaySeconds: z.number().min(1).max(60).default(3),
         isActive: z.boolean().default(false),
       }))
       .mutation(async ({ input }) => {
@@ -762,6 +914,8 @@ export const appRouter = router({
           clientSecret: input.clientSecret,
           primaryColor: input.primaryColor,
           syncRules: input.syncRules,
+          batchSize: input.batchSize,
+          batchDelaySeconds: input.batchDelaySeconds,
           isActive: input.isActive,
         };
 
@@ -781,6 +935,8 @@ export const appRouter = router({
         clientSecret: z.string().min(1).optional(),
         primaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
         syncRules: z.string().optional(),
+        batchSize: z.number().min(1).max(100).optional(),
+        batchDelaySeconds: z.number().min(1).max(60).optional(),
         isActive: z.boolean().optional(),
       }))
       .mutation(async ({ input }) => {
@@ -796,6 +952,8 @@ export const appRouter = router({
         if (data.clientSecret) updateData.clientSecret = data.clientSecret;
         if (data.primaryColor) updateData.primaryColor = data.primaryColor;
         if (data.syncRules !== undefined) updateData.syncRules = data.syncRules;
+        if (data.batchSize !== undefined) updateData.batchSize = data.batchSize;
+        if (data.batchDelaySeconds !== undefined) updateData.batchDelaySeconds = data.batchDelaySeconds;
         if (data.isActive !== undefined) updateData.isActive = data.isActive;
 
         await updateClient(id, updateData);

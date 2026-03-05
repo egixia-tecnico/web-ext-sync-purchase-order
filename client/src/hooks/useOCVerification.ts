@@ -2,6 +2,11 @@
  * Hook para verificación y sincronización por lotes de OC
  * Ahora usa tRPC para comunicarse con el backend proxy.
  * El backend maneja: token, renovación 401, validación de proveedores.
+ * 
+ * Procesamiento por lotes:
+ * - Verificación: el backend divide las OC en lotes según batch_size del cliente
+ * - Sincronización: usa endpoint synchronizeBatch que procesa en lotes con delays
+ * - Progreso: muestra lote actual / total de lotes en la UI
  */
 import { useCallback } from "react";
 import { useOCSync, type OCRecord } from "@/contexts/OCSyncContext";
@@ -71,11 +76,14 @@ export function useOCVerification() {
       // Apply all updates
       updateRecordsBatch(batchUpdates);
 
-      // Show summary toast
+      // Show summary toast with batch info
       if (result.summary) {
         const s = result.summary;
+        const batchMsg = result.batchInfo
+          ? ` (${result.batchInfo.totalBatches} lotes de ${result.batchInfo.batchSize})`
+          : "";
         toast.success(
-          `Verificación completada: ${s.found} sincronizadas, ${s.not_found} no encontradas, ${s.supplier_not_exists} proveedor no existe, ${s.errors} errores`,
+          `Verificación completada${batchMsg}: ${s.found} sincronizadas, ${s.not_found} no encontradas, ${s.supplier_not_exists} proveedor no existe, ${s.errors} errores`,
           { position: "bottom-left", duration: 8000 }
         );
       }
@@ -116,7 +124,8 @@ export function useOCVerification() {
     }
   }, [records, selectedRecords, updateRecordsBatch, setIsProcessing, setProgress, verifyBatchMutation, clientKey]);
 
-  const synchronizeMutation = trpc.egixia.synchronizePurchaseOrder.useMutation();
+  // Use the new batch synchronization endpoint
+  const synchronizeBatchMutation = trpc.egixia.synchronizeBatch.useMutation();
 
   const synchronizeBatch = useCallback(async (recordsToSync?: OCRecord[]) => {
     // Use selected records if no specific records provided
@@ -133,68 +142,84 @@ export function useOCVerification() {
     setIsProcessing(true);
     setProgress({ current: 0, total: toSync.length });
 
-    let successCount = 0;
-    let failedCount = 0;
-
-    // Synchronize one by one (API doesn't support batch)
-    for (let i = 0; i < toSync.length; i++) {
-      const record = toSync[i];
-      setProgress({ current: i + 1, total: toSync.length });
-
-      try {
-        const result = await synchronizeMutation.mutateAsync({
-          buyerExternalCode: record.buyer_external_code,
-          purchaseOrderNumber: record.purchase_order_number,
+    try {
+      // Call the batch synchronization endpoint (backend handles batching + delays)
+      const result = await synchronizeBatchMutation.mutateAsync({
+        orders: toSync.map(r => ({
+          buyerExternalCode: r.buyer_external_code,
+          purchaseOrderNumber: r.purchase_order_number,
           sendEmails: false,
-          clientKey: clientKey || undefined,
-        });
+        })),
+        clientKey: clientKey || undefined,
+      });
 
-        if (result.success) {
-          successCount++;
-        } else {
-          failedCount++;
+      const successCount = result.summary.success;
+      const failedCount = result.summary.failed;
+
+      // Update records with sync results
+      for (let i = 0; i < toSync.length; i++) {
+        const record = toSync[i];
+        const syncResult = result.results[i];
+
+        if (syncResult && !syncResult.success) {
           updateRecord(record.id, {
-            statusMessage: result.errorMessage || result.error || "Error al sincronizar",
+            statusMessage: syncResult.errorMessage || syncResult.error || "Error al sincronizar",
           });
         }
-      } catch (err: any) {
-        const syncErrMsg = err?.message || "Error al sincronizar";
-        // Handle communication failure alerts (blocking popup)
-        if (syncErrMsg.includes("COMMUNICATION_FAILURE_TOKEN")) {
-          (window as any).__showCommFailure?.("token");
-          setIsProcessing(false);
-          return { success: successCount, failed: failedCount, skipped: 0 };
-        } else if (syncErrMsg.includes("COMMUNICATION_FAILURE_SERVICE")) {
-          (window as any).__showCommFailure?.("service");
-          setIsProcessing(false);
-          return { success: successCount, failed: failedCount, skipped: 0 };
-        }
-        failedCount++;
-        updateRecord(record.id, {
-          statusMessage: syncErrMsg,
-        });
       }
+
+      setProgress({ current: toSync.length, total: toSync.length });
+
+      // Re-verify synchronized orders to update their status
+      if (successCount > 0) {
+        const successfulOrders = toSync.filter((_, i) => result.results[i]?.success);
+        if (successfulOrders.length > 0) {
+          await verifyBatch(successfulOrders);
+        }
+      }
+
+      // Show summary toast with batch info
+      const total = toSync.length;
+      const batchMsg = result.batchInfo
+        ? ` (${result.batchInfo.totalBatches} lotes de ${result.batchInfo.batchSize})`
+        : "";
+      if (successCount === total) {
+        toast.success(`${successCount} de ${total} órdenes sincronizadas correctamente${batchMsg}`, { position: "bottom-left", duration: 5000 });
+      } else if (successCount > 0) {
+        toast.warning(`${successCount} de ${total} órdenes sincronizadas correctamente${batchMsg}`, { position: "bottom-left", duration: 5000 });
+      } else {
+        toast.error(`0 de ${total} órdenes sincronizadas`, { position: "bottom-left", duration: 5000 });
+      }
+
+      return { success: successCount, failed: failedCount, skipped: 0 };
+    } catch (err: any) {
+      const syncErrMsg = err?.message || "Error al sincronizar";
+      // Handle communication failure alerts (blocking popup)
+      if (syncErrMsg.includes("COMMUNICATION_FAILURE_TOKEN")) {
+        (window as any).__showCommFailure?.("token");
+        setIsProcessing(false);
+        return { success: 0, failed: toSync.length, skipped: 0 };
+      } else if (syncErrMsg.includes("COMMUNICATION_FAILURE_SERVICE")) {
+        (window as any).__showCommFailure?.("service");
+        setIsProcessing(false);
+        return { success: 0, failed: toSync.length, skipped: 0 };
+      }
+
+      toast.error(`Error en sincronización: ${syncErrMsg}`, { position: "bottom-left", duration: 6000 });
+
+      // Mark all as error
+      const errorUpdates = toSync.map(r => ({
+        id: r.id,
+        updates: { statusMessage: syncErrMsg },
+      }));
+      updateRecordsBatch(errorUpdates);
+
+      setIsProcessing(false);
+      return { success: 0, failed: toSync.length, skipped: 0 };
+    } finally {
+      setIsProcessing(false);
     }
-
-    // Re-verify synchronized orders to update their status
-    if (successCount > 0) {
-      await verifyBatch(toSync.filter((_, i) => i < successCount));
-    }
-
-    setIsProcessing(false);
-
-    // Show summary toast
-    const total = toSync.length;
-    if (successCount === total) {
-      toast.success(`${successCount} de ${total} órdenes sincronizadas correctamente`, { position: "bottom-left", duration: 5000 });
-    } else if (successCount > 0) {
-      toast.warning(`${successCount} de ${total} órdenes sincronizadas correctamente`, { position: "bottom-left", duration: 5000 });
-    } else {
-      toast.error(`0 de ${total} órdenes sincronizadas`, { position: "bottom-left", duration: 5000 });
-    }
-
-    return { success: successCount, failed: failedCount, skipped: 0 };
-  }, [records, selectedRecords, updateRecord, updateRecordsBatch, setIsProcessing, setProgress, synchronizeMutation, verifyBatch, clientKey]);
+  }, [records, selectedRecords, updateRecord, updateRecordsBatch, setIsProcessing, setProgress, synchronizeBatchMutation, verifyBatch, clientKey]);
 
   return { verifyBatch, synchronizeBatch };
 }

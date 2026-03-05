@@ -29,6 +29,8 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
     clientSecret: "",
     primaryColor: "#10b981",
     syncRules: "",
+    batchSize: 10,
+    batchDelaySeconds: 3,
     isActive: false,
   });
 
@@ -59,6 +61,8 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
         clientSecret: existingClient.clientSecret,
         primaryColor: existingClient.primaryColor,
         syncRules: existingClient.syncRules || "",
+        batchSize: existingClient.batchSize ?? 10,
+        batchDelaySeconds: existingClient.batchDelaySeconds ?? 3,
         isActive: existingClient.isActive,
       });
     } else if (!clientId) {
@@ -73,6 +77,8 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
         clientSecret: "",
         primaryColor: "#10b981",
         syncRules: "",
+        batchSize: 10,
+        batchDelaySeconds: 3,
         isActive: false,
       });
     }
@@ -95,7 +101,7 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
     }
   };
 
-  const handleChange = (field: string, value: string | boolean) => {
+  const handleChange = (field: string, value: string | boolean | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     // Reset connection test when credentials change
     if (["baseUrl", "userName", "password", "clientId", "clientSecret"].includes(field)) {
@@ -262,6 +268,38 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
                     className="flex-1"
                   />
                 </div>
+              </div>
+
+              <div>
+                <Label htmlFor="batchSize">Tamaño de Lote *</Label>
+                <Input
+                  id="batchSize"
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={formData.batchSize}
+                  onChange={(e) => handleChange("batchSize", Math.max(1, Math.min(100, parseInt(e.target.value) || 1)) as any)}
+                  required
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Cantidad de peticiones por lote (1-100)
+                </p>
+              </div>
+
+              <div>
+                <Label htmlFor="batchDelaySeconds">Espera entre Lotes (seg) *</Label>
+                <Input
+                  id="batchDelaySeconds"
+                  type="number"
+                  min={1}
+                  max={60}
+                  value={formData.batchDelaySeconds}
+                  onChange={(e) => handleChange("batchDelaySeconds", Math.max(1, Math.min(60, parseInt(e.target.value) || 1)) as any)}
+                  required
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Segundos de espera entre lotes (1-60)
+                </p>
               </div>
 
               <div className="col-span-2">

@@ -155,6 +155,7 @@ export default function ClientsManagement() {
                 <TableHead>Usuario</TableHead>
                 <TableHead>Client ID</TableHead>
                 <TableHead className="w-24">Color</TableHead>
+                <TableHead className="w-28">Lotes</TableHead>
                 <TableHead className="w-32 text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
@@ -189,6 +190,13 @@ export default function ClientsManagement() {
                         style={{ backgroundColor: client.primaryColor }}
                       />
                       <span className="text-xs font-mono">{client.primaryColor}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">{client.batchSize ?? 10}</span> peticiones
+                      <br />
+                      <span className="font-medium text-foreground">{client.batchDelaySeconds ?? 3}</span>s espera
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
