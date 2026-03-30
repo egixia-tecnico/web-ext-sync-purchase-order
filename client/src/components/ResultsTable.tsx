@@ -195,8 +195,8 @@ export default function ResultsTable() {
     return sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />;
   };
 
-  // Show date column only in step 3+ (after verification)
-  const showDateColumn = currentStep >= 3;
+  // Show date column from step 2+ (during and after verification)
+  const showDateColumn = currentStep >= 2;
   // In step 5 (Exportar), hide checkboxes
   const showCheckboxes = currentStep !== 5;
 

@@ -69,6 +69,26 @@ export function useOCVerification() {
               : apiResult.status === "supplier_not_exists" ? "supplier_not_exists"
               : "error",
             statusMessage: apiResult.error || (apiResult.status === "found" ? `Sincronizada (${apiResult.syncStatus})` : apiResult.status === "not_found" ? "OC no encontrada" : "Proveedor no existe"),
+            // Map portal data including dates
+            ...(apiResult.status === "found" ? {
+              buyer_name: apiResult.buyerName || target.buyer_name,
+              provider_name: apiResult.providerName || target.provider_name,
+              document_date: apiResult.documentDate || undefined,
+              synchronization_date: apiResult.synchronizationDate || undefined,
+              delivery_status: apiResult.deliveryStatus || undefined,
+              canceled: apiResult.canceled || undefined,
+              updated: apiResult.updated || undefined,
+              portalData: {
+                buyerName: apiResult.buyerName || "",
+                providerCode: apiResult.providerExternalCode1 || "",
+                providerName: apiResult.providerName || "",
+                documentDate: apiResult.documentDate || "",
+                deliveryStatus: apiResult.deliveryStatus || "",
+                canceled: apiResult.canceled || "",
+                updated: apiResult.updated || "",
+                synchronizationDate: apiResult.synchronizationDate || "",
+              },
+            } : {}),
           },
         });
       }

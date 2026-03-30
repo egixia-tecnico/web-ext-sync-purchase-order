@@ -514,3 +514,11 @@
 
 ### Tests
 - [x] 24 tests pasando (batch.test.ts: 5 tests nuevos)
+
+
+## Mostrar Fechas en Tabla de Resultados
+
+- [x] Revisar qué fechas retorna la API de Egixia en verifyPurchaseOrders
+- [x] Mapear documentDate y synchronizationDate en useOCVerification al campo portalData del record
+- [x] Columna de fechas visible desde el paso 2 (verificación) en vez de paso 3
+- [x] Formato de fecha legible (DD/MM/YYYY HH:MM) con locale es-CO
