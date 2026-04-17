@@ -1,4 +1,4 @@
-import { eq, desc, sql, inArray } from "drizzle-orm";
+import { eq, desc, sql, inArray, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, verificationLogs, clients, InsertClient, Client, magicLinks, InsertMagicLink, integrationLogs } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -295,38 +295,42 @@ export async function deleteIntegrationLogsByClientKey(clientKey: string) {
   }
 }
 
+/**
+ * Retención de logs: 20 registros por estado (success / error / timeout) por cliente.
+ * Total máximo: 60 registros por cliente.
+ */
 async function cleanOldIntegrationLogs(clientId: number) {
   const db = await getDb();
   if (!db) return;
 
-  // Get all logs for this client, ordered by date desc
-  const allLogs = await db
-    .select({ id: integrationLogs.id, url: integrationLogs.url, createdAt: integrationLogs.createdAt })
-    .from(integrationLogs)
-    .where(eq(integrationLogs.clientId, clientId))
-    .orderBy(desc(integrationLogs.createdAt));
+  const MAX_PER_STATUS = 20;
+  const STATUSES = ['success', 'error', 'timeout'];
 
-  // Group logs by integration type (extract service name from URL)
-  const logsByType: Record<string, typeof allLogs> = {};
-  for (const log of allLogs) {
-    const serviceName = extractServiceName(log.url);
-    if (!logsByType[serviceName]) {
-      logsByType[serviceName] = [];
-    }
-    logsByType[serviceName].push(log);
-  }
-
-  // Keep only last 10 per type
   const idsToDelete: number[] = [];
-  for (const [serviceName, logs] of Object.entries(logsByType)) {
-    if (logs.length > 10) {
-      const toDelete = logs.slice(10).map(log => log.id);
+
+  for (const statusValue of STATUSES) {
+    // Obtener todos los logs de este cliente y estado, ordenados por fecha desc
+    const logsForStatus = await db
+      .select({ id: integrationLogs.id })
+      .from(integrationLogs)
+      .where(
+        and(
+          eq(integrationLogs.clientId, clientId),
+          eq(integrationLogs.status, statusValue)
+        )
+      )
+      .orderBy(desc(integrationLogs.createdAt));
+
+    // Si hay más de MAX_PER_STATUS, marcar los más antiguos para eliminar
+    if (logsForStatus.length > MAX_PER_STATUS) {
+      const toDelete = logsForStatus.slice(MAX_PER_STATUS).map(log => log.id);
       idsToDelete.push(...toDelete);
     }
   }
 
   if (idsToDelete.length > 0) {
     await db.delete(integrationLogs).where(inArray(integrationLogs.id, idsToDelete));
+    console.log(`[Database] Cleaned ${idsToDelete.length} old integration logs for client ${clientId}`);
   }
 }
 

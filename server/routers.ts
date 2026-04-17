@@ -210,6 +210,9 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
       },
       data: body,
       timeout: 70000,
+      // Recibir respuesta como texto para poder detectar HTML antes de parsear
+      responseType: "text",
+      transformResponse: [(rawData: string) => rawData], // Evitar auto-parse de axios
     });
 
     if (response.status !== 200) {
@@ -219,25 +222,59 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
+    const rawBody: string = typeof response.data === 'string' ? response.data : String(response.data ?? '');
+    const contentType = (response.headers['content-type'] || '') as string;
+
     // Detect HTML response (server returned error page instead of JSON)
-    const contentType = response.headers['content-type'] || '';
     if (
       contentType.includes('text/html') ||
-      (typeof response.data === 'string' && response.data.trimStart().startsWith('<'))
+      rawBody.trimStart().startsWith('<')
     ) {
       console.error(`[Egixia] Server returned HTML instead of JSON for ${url}. Content-Type: ${contentType}`);
       status = "error";
-      errorDetail = `El servidor devolvió HTML en vez de JSON. Posible URL incorrecta o error de servidor. URL: ${url}`;
-      responseData = { error: "HTML_RESPONSE", url, contentType };
-      throw new Error(`El servidor devolvió una página HTML en vez de JSON. Verifique la URL base y las credenciales del cliente. URL: ${url}`);
+      errorDetail = `El servidor devolvió HTML en vez de JSON. Posible URL base incorrecta o sesión expirada. URL: ${url}`;
+      responseData = { error: "HTML_RESPONSE", url, contentType, preview: rawBody.substring(0, 200) };
+      throw new Error(
+        `El servidor devolvió una página HTML en vez de JSON. ` +
+        `Verifique que la URL base del cliente sea correcta y que el servicio esté disponible. ` +
+        `URL: ${url}`
+      );
+    }
+
+    // Parse JSON manually after HTML check
+    let parsedData: any;
+    try {
+      parsedData = JSON.parse(rawBody);
+    } catch (parseErr: any) {
+      console.error(`[Egixia] Failed to parse JSON response from ${url}:`, parseErr.message);
+      status = "error";
+      errorDetail = `Respuesta no es JSON válido. Primeros 200 caracteres: ${rawBody.substring(0, 200)}`;
+      responseData = { error: "INVALID_JSON", preview: rawBody.substring(0, 200) };
+      throw new Error(`La respuesta del servidor no es JSON válido. URL: ${url}. Detalle: ${parseErr.message}`);
     }
 
     // Reset failure counter on success
     endpointFailureCount[endpointKey] = 0;
-    responseData = response.data;
-    return response.data;
+    responseData = parsedData;
+    return parsedData;
   } catch (err: any) {
     const httpStatus = err.response?.status;
+
+    // Detect HTML in error response body (axios error with HTML body)
+    const errResponseData = err.response?.data;
+    if (
+      typeof errResponseData === 'string' &&
+      errResponseData.trimStart().startsWith('<') &&
+      !errorDetail // Only if not already set
+    ) {
+      status = "error";
+      errorDetail = `El servidor devolvió HTML en vez de JSON (capturado en error). Posible URL base incorrecta. URL: ${url}. Preview: ${errResponseData.substring(0, 200)}`;
+      responseData = { error: "HTML_RESPONSE_IN_ERROR", url, preview: errResponseData.substring(0, 200) };
+      throw new Error(
+        `El servidor devolvió una página HTML en vez de JSON. ` +
+        `Verifique que la URL base del cliente sea correcta. URL: ${url}`
+      );
+    }
     
     // Handle 401 Unauthorized - token expired, retry once with new token
     if (httpStatus === 401 && retryOn401) {

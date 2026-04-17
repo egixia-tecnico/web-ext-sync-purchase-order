@@ -542,3 +542,10 @@
 - [x] Si el key es válido y activo: redirigir a /?clientKey=xxx tras 800ms con feedback visual
 - [x] Si el key no existe: error inline rojo sin recargar la página
 - [x] Si el key existe pero está inactivo: mensaje amber con nombre de empresa
+
+## Correcciones Log de Integraciones 2026-04-17b
+
+- [x] Corregir error HTML: axios ahora recibe texto plano (responseType: text), detecta HTML antes de parsear JSON, y captura HTML en el catch también
+- [x] Garantizar log siempre: el finally guarda log incluso cuando la petición falla antes de obtener respuesta
+- [x] Retención de logs: 20 por estado (success/error/timeout) = 60 total máximo por cliente
+- [ ] Mostrar errorDetail en la UI del log de integraciones (pendiente)
