@@ -522,3 +522,8 @@
 - [x] Mapear documentDate y synchronizationDate en useOCVerification al campo portalData del record
 - [x] Columna de fechas visible desde el paso 2 (verificación) en vez de paso 3
 - [x] Formato de fecha legible (DD/MM/YYYY HH:MM) con locale es-CO
+
+## Bugs Maestro de Clientes
+
+- [x] Bug: al activar un cliente en el formulario se inactivan los demás → eliminada lógica de desactivación exclusiva en createClient, updateClient y setActiveClient
+- [x] Bug: cliente "Manuelita TEST" quedó inactivo por el bug anterior → reactivado via script (ambos clientes ahora activos)

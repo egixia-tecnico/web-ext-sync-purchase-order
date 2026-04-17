@@ -167,11 +167,7 @@ export async function createClient(data: InsertClient) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  // If this client is set as active, deactivate all others first
-  if (data.isActive) {
-    await db.update(clients).set({ isActive: false });
-  }
-
+  // Multiple clients can be active simultaneously - no exclusivity enforced
   const result = await db.insert(clients).values(data);
   return result;
 }
@@ -180,11 +176,7 @@ export async function updateClient(id: number, data: Partial<InsertClient>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  // If setting this client as active, deactivate all others first
-  if (data.isActive === true) {
-    await db.update(clients).set({ isActive: false });
-  }
-
+  // Multiple clients can be active simultaneously - just update this client
   await db.update(clients).set(data).where(eq(clients.id, id));
 }
 
@@ -199,10 +191,7 @@ export async function setActiveClient(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  // Deactivate all clients first
-  await db.update(clients).set({ isActive: false });
-  
-  // Activate the selected client
+  // Only activate the selected client - other clients keep their current state
   await db.update(clients).set({ isActive: true }).where(eq(clients.id, id));
 }
 
