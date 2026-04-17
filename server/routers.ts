@@ -516,6 +516,22 @@ export const appRouter = router({
 // apiConfig router removed - all configuration now managed through clients router
 
   egixia: router({
+    // Get batch configuration for a client (used by frontend to split requests)
+    getBatchConfig: publicProcedure
+      .input(z.object({ clientKey: z.string().optional() }))
+      .query(async ({ input }) => {
+        const credentials = await getClientCredentials(input.clientKey);
+        return {
+          batchSize: credentials?.batchSize ?? 10,
+          batchDelaySeconds: credentials?.batchDelaySeconds ?? 3,
+          clientName: credentials?.clientName ?? null,
+          primaryColor: credentials?.primaryColor ?? null,
+          syncRules: credentials?.syncRules ?? null,
+        };
+      }),
+
+    // Verify a small batch of purchase orders (frontend splits into batches)
+    // Each call processes a small set of OC to avoid gateway timeout
     verifyPurchaseOrders: publicProcedure
       .input(z.object({
         orders: z.array(z.object({
@@ -525,98 +541,84 @@ export const appRouter = router({
           buyerCode: z.string().optional(),
         })),
         clientKey: z.string().optional(),
+        isFirstBatch: z.boolean().optional(), // true = clean logs before starting
+        isLastBatch: z.boolean().optional(),  // true = save verification summary
+        globalSummary: z.object({
+          total: z.number(),
+          found: z.number(),
+          not_found: z.number(),
+          supplier_not_exists: z.number(),
+          errors: z.number(),
+        }).optional(),
       }))
       .mutation(async ({ input }) => {
-        // Clean all integration logs for this client before verification
-        if (input.clientKey) {
+        // Clean integration logs only on first batch
+        if (input.isFirstBatch && input.clientKey) {
           await deleteIntegrationLogsByClientKey(input.clientKey);
         }
 
-        // Get batch configuration from client
-        const credentials = await getClientCredentials(input.clientKey);
-        const batchSize = credentials?.batchSize ?? 10;
-        const batchDelaySeconds = credentials?.batchDelaySeconds ?? 3;
-
-        console.log(`[Egixia] Batch verification: ${input.orders.length} orders, batchSize=${batchSize}, delay=${batchDelaySeconds}s`);
+        console.log(`[Egixia] Verifying batch of ${input.orders.length} orders`);
 
         const results: any[] = [];
 
-        // Split orders into batches
-        const totalBatches = Math.ceil(input.orders.length / batchSize);
+        // Process each order in this batch sequentially
+        for (const order of input.orders) {
+          try {
+            const data = await callEgixiaApi(
+              `/apimanager/purchase_order_v1/list?buyer_external_code=${order.buyerCode}&purchase_order_number=${order.purchaseOrderId}`,
+              "GET",
+              undefined,
+              input.clientKey
+            );
 
-        for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
-          const batchStart = batchIndex * batchSize;
-          const batchEnd = Math.min(batchStart + batchSize, input.orders.length);
-          const batch = input.orders.slice(batchStart, batchEnd);
-
-          console.log(`[Egixia] Processing verification batch ${batchIndex + 1}/${totalBatches} (${batch.length} orders)`);
-
-          // Process each order in the batch sequentially
-          for (const order of batch) {
-            try {
-              const data = await callEgixiaApi(
-                `/apimanager/purchase_order_v1/list?buyer_external_code=${order.buyerCode}&purchase_order_number=${order.purchaseOrderId}`,
-                "GET",
-                undefined,
-                input.clientKey
+            // Check if order is synchronized (SDTOrdenesCompra has data)
+            if (data && data.SDTOrdenesCompra && Array.isArray(data.SDTOrdenesCompra) && data.SDTOrdenesCompra.length > 0) {
+              const orderData = data.SDTOrdenesCompra.find(
+                (oc: any) =>
+                  oc.buyer_external_code === order.buyerCode &&
+                  oc.purchase_order_number === order.purchaseOrderId
               );
 
-              // Check if order is synchronized (SDTOrdenesCompra has data)
-              if (data && data.SDTOrdenesCompra && Array.isArray(data.SDTOrdenesCompra) && data.SDTOrdenesCompra.length > 0) {
-                const orderData = data.SDTOrdenesCompra.find(
-                  (oc: any) =>
-                    oc.buyer_external_code === order.buyerCode &&
-                    oc.purchase_order_number === order.purchaseOrderId
-                );
-
-                if (orderData) {
-                  results.push({
-                    purchaseOrderId: order.purchaseOrderId,
-                    providerExternalCode1: order.providerExternalCode1,
-                    providerExternalCode2: order.providerExternalCode2 || "",
-                    providerExternalCode3: orderData.provider_external_code3 || "",
-                    buyerCode: order.buyerCode,
-                    buyerName: orderData.buyer_name || null,
-                    providerName: orderData.provider_name || null,
-                    status: "found",
-                    syncStatus: "synchronized",
-                    documentDate: orderData.document_date || null,
-                    synchronizationDate: orderData.synchronization_date || null,
-                    deliveryStatus: orderData.delivery_status || null,
-                    canceled: orderData.canceled || null,
-                    updated: orderData.updated || null,
-                  });
-                } else {
-                  // No exact match - check supplier
-                  const supplierResult = await checkSupplierExists(order, input.clientKey);
-                  results.push(supplierResult);
-                }
+              if (orderData) {
+                results.push({
+                  purchaseOrderId: order.purchaseOrderId,
+                  providerExternalCode1: order.providerExternalCode1,
+                  providerExternalCode2: order.providerExternalCode2 || "",
+                  providerExternalCode3: orderData.provider_external_code3 || "",
+                  buyerCode: order.buyerCode,
+                  buyerName: orderData.buyer_name || null,
+                  providerName: orderData.provider_name || null,
+                  status: "found",
+                  syncStatus: "synchronized",
+                  documentDate: orderData.document_date || null,
+                  synchronizationDate: orderData.synchronization_date || null,
+                  deliveryStatus: orderData.delivery_status || null,
+                  canceled: orderData.canceled || null,
+                  updated: orderData.updated || null,
+                });
               } else {
-                // Order not found - check supplier
                 const supplierResult = await checkSupplierExists(order, input.clientKey);
                 results.push(supplierResult);
               }
-            } catch (error: any) {
-              results.push({
-                purchaseOrderId: order.purchaseOrderId,
-                providerExternalCode1: order.providerExternalCode1,
-                providerExternalCode2: order.providerExternalCode2 || "",
-                buyerCode: order.buyerCode,
-                status: "error",
-                syncStatus: null,
-                error: error.message,
-              });
+            } else {
+              const supplierResult = await checkSupplierExists(order, input.clientKey);
+              results.push(supplierResult);
             }
-          }
-
-          // Wait between batches (except after the last batch)
-          if (batchIndex < totalBatches - 1) {
-            console.log(`[Egixia] Waiting ${batchDelaySeconds}s before next batch...`);
-            await sleep(batchDelaySeconds * 1000);
+          } catch (error: any) {
+            results.push({
+              purchaseOrderId: order.purchaseOrderId,
+              providerExternalCode1: order.providerExternalCode1,
+              providerExternalCode2: order.providerExternalCode2 || "",
+              buyerCode: order.buyerCode,
+              status: "error",
+              syncStatus: null,
+              error: error.message,
+            });
           }
         }
 
-        const summary = {
+        // Calculate batch summary
+        const batchSummary = {
           total: results.length,
           found: results.filter((r) => r.status === "found").length,
           not_found: results.filter((r) => r.status === "not_found").length,
@@ -624,26 +626,26 @@ export const appRouter = router({
           errors: results.filter((r) => r.status === "error").length,
         };
 
-        // Get clientId for logging
-        let clientId: number | undefined;
-        if (input.clientKey) {
-          const client = await getClientByKey(input.clientKey);
-          if (client) {
-            clientId = client.id;
+        // Save verification log on last batch with global summary
+        if (input.isLastBatch) {
+          let clientId: number | undefined;
+          if (input.clientKey) {
+            const client = await getClientByKey(input.clientKey);
+            if (client) clientId = client.id;
           }
+          const gs = input.globalSummary || batchSummary;
+          await saveVerificationLog({
+            clientId,
+            totalRecords: gs.total + batchSummary.total,
+            synced: gs.found + batchSummary.found,
+            notFound: gs.not_found + batchSummary.not_found,
+            supplierNotExists: gs.supplier_not_exists + batchSummary.supplier_not_exists,
+            errors: gs.errors + batchSummary.errors,
+            executionTimeMs: 0,
+          });
         }
 
-        await saveVerificationLog({
-          clientId,
-          totalRecords: summary.total,
-          synced: summary.found,
-          notFound: summary.not_found,
-          supplierNotExists: summary.supplier_not_exists,
-          errors: summary.errors,
-          executionTimeMs: 0,
-        });
-
-        // Normalize all result objects to have the same shape (superjson requires consistent types)
+        // Normalize all result objects to have the same shape
         const normalizedResults = results.map((r) => ({
           purchaseOrderId: String(r.purchaseOrderId ?? ""),
           providerExternalCode1: String(r.providerExternalCode1 ?? ""),
@@ -664,17 +666,7 @@ export const appRouter = router({
 
         return {
           results: normalizedResults,
-          summary,
-          batchInfo: {
-            batchSize,
-            batchDelaySeconds,
-            totalBatches,
-          },
-          clientInfo: credentials ? {
-            name: String(credentials.clientName ?? ""),
-            primaryColor: String(credentials.primaryColor ?? ""),
-            syncRules: credentials.syncRules != null ? String(credentials.syncRules) : null,
-          } : null,
+          summary: batchSummary,
         };
       }),
 

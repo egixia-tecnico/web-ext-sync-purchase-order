@@ -1,245 +1,364 @@
 /**
  * Hook para verificación y sincronización por lotes de OC
- * Ahora usa tRPC para comunicarse con el backend proxy.
- * El backend maneja: token, renovación 401, validación de proveedores.
  * 
- * Procesamiento por lotes:
- * - Verificación: el backend divide las OC en lotes según batch_size del cliente
- * - Sincronización: usa endpoint synchronizeBatch que procesa en lotes con delays
- * - Progreso: muestra lote actual / total de lotes en la UI
+ * ARQUITECTURA DE LOTES (Frontend-driven):
+ * - El frontend obtiene la configuración de lotes del cliente (getBatchConfig)
+ * - Divide las OC en lotes de N registros (batchSize del cliente)
+ * - Envía cada lote como una petición tRPC separada
+ * - Espera batchDelaySeconds entre cada lote
+ * - Muestra progreso en tiempo real: "Procesando lote X de Y (N registros)"
+ * 
+ * Esto evita el 504 Gateway Timeout que ocurría al enviar 300+ OC en una sola petición.
  */
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { useOCSync, type OCRecord } from "@/contexts/OCSyncContext";
 import { useClientKey } from "@/contexts/ClientKeyContext";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 
+// Helper to wait N milliseconds
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 export function useOCVerification() {
   const { records, updateRecord, updateRecordsBatch, setIsProcessing, setProgress, selectedRecords } = useOCSync();
   const { clientKey } = useClientKey();
+  const cancelRef = useRef(false);
 
   const verifyBatchMutation = trpc.egixia.verifyPurchaseOrders.useMutation();
+  const batchConfigQuery = trpc.egixia.getBatchConfig.useQuery(
+    { clientKey: clientKey || undefined },
+    { enabled: !!clientKey, staleTime: 60000 }
+  );
 
   const verifyBatch = useCallback(async (recordsToVerify?: OCRecord[]) => {
-    // Use selected records if no specific records provided
     const targets = recordsToVerify || records.filter(r => selectedRecords.has(r.id));
     if (targets.length === 0) {
       toast.warning("No hay registros seleccionados para verificar", { position: "bottom-left" });
       return;
     }
 
+    cancelRef.current = false;
+
+    // Get batch config (from cache or defaults)
+    const batchSize = batchConfigQuery.data?.batchSize ?? 10;
+    const batchDelaySeconds = batchConfigQuery.data?.batchDelaySeconds ?? 3;
+    const syncRules = batchConfigQuery.data?.syncRules ?? null;
+
+    // Calculate batches
+    const totalBatches = Math.ceil(targets.length / batchSize);
+
     setIsProcessing(true);
     setProgress({ current: 0, total: targets.length });
 
     // Mark all targets as checking
-    const checkingUpdates = targets.map(r => ({ id: r.id, updates: { status: "checking" as const, statusMessage: "Verificando..." } }));
+    const checkingUpdates = targets.map(r => ({
+      id: r.id,
+      updates: { status: "checking" as const, statusMessage: "En cola de verificación..." }
+    }));
     updateRecordsBatch(checkingUpdates);
 
-    try {
-      const result = await verifyBatchMutation.mutateAsync({
-        orders: targets.map(r => ({
-          purchaseOrderId: r.purchase_order_number,
-          providerExternalCode1: r.provider_external_code_1 || r.provider_external_code || "",
-          providerExternalCode2: r.provider_external_code_2 || "",
-          buyerCode: r.buyer_external_code,
-        })),
-        clientKey: clientKey || undefined,
-      });
+    // Show batch info toast
+    if (totalBatches > 1) {
+      toast.info(
+        `Procesando ${targets.length} registros en ${totalBatches} lotes de ${batchSize} (espera de ${batchDelaySeconds}s entre lotes)`,
+        { position: "bottom-left", duration: 5000 }
+      );
+    }
 
-      // Map results back to records
-      const batchUpdates: Array<{ id: string; updates: Partial<OCRecord> }> = [];
+    // Accumulate global summary across batches
+    const globalSummary = { total: 0, found: 0, not_found: 0, supplier_not_exists: 0, errors: 0 };
+    let processedCount = 0;
 
-      for (let i = 0; i < targets.length; i++) {
-        const target = targets[i];
-        const apiResult = result.results[i];
+    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+      if (cancelRef.current) {
+        toast.warning("Verificación cancelada por el usuario", { position: "bottom-left" });
+        break;
+      }
 
-        if (!apiResult) {
+      const batchStart = batchIndex * batchSize;
+      const batchEnd = Math.min(batchStart + batchSize, targets.length);
+      const batchTargets = targets.slice(batchStart, batchEnd);
+
+      // Update status for this batch's records
+      const batchCheckingUpdates = batchTargets.map(r => ({
+        id: r.id,
+        updates: { statusMessage: `Verificando... (lote ${batchIndex + 1} de ${totalBatches})` }
+      }));
+      updateRecordsBatch(batchCheckingUpdates);
+
+      try {
+        const result = await verifyBatchMutation.mutateAsync({
+          orders: batchTargets.map(r => ({
+            purchaseOrderId: r.purchase_order_number,
+            providerExternalCode1: r.provider_external_code_1 || r.provider_external_code || "",
+            providerExternalCode2: r.provider_external_code_2 || "",
+            buyerCode: r.buyer_external_code,
+          })),
+          clientKey: clientKey || undefined,
+          isFirstBatch: batchIndex === 0,
+          isLastBatch: batchIndex === totalBatches - 1,
+          globalSummary: batchIndex === totalBatches - 1 ? globalSummary : undefined,
+        });
+
+        // Map results back to records for this batch
+        const batchUpdates: Array<{ id: string; updates: Partial<OCRecord> }> = [];
+
+        for (let i = 0; i < batchTargets.length; i++) {
+          const target = batchTargets[i];
+          const apiResult = result.results[i];
+
+          if (!apiResult) {
+            batchUpdates.push({
+              id: target.id,
+              updates: { status: "error", statusMessage: "Sin resultado del servidor" },
+            });
+            continue;
+          }
+
           batchUpdates.push({
             id: target.id,
-            updates: { status: "error", statusMessage: "Sin resultado del servidor" },
+            updates: {
+              status: apiResult.status === "found" ? "synced"
+                : apiResult.status === "not_found" ? "not_found"
+                : apiResult.status === "supplier_not_exists" ? "supplier_not_exists"
+                : "error",
+              statusMessage: apiResult.error || (apiResult.status === "found" ? `Sincronizada (${apiResult.syncStatus})` : apiResult.status === "not_found" ? "OC no encontrada" : apiResult.status === "supplier_not_exists" ? "Proveedor no existe" : "Error"),
+              ...(apiResult.status === "found" ? {
+                buyer_name: apiResult.buyerName || target.buyer_name,
+                provider_name: apiResult.providerName || target.provider_name,
+                document_date: apiResult.documentDate || undefined,
+                synchronization_date: apiResult.synchronizationDate || undefined,
+                delivery_status: apiResult.deliveryStatus || undefined,
+                canceled: apiResult.canceled != null ? String(apiResult.canceled) : undefined,
+                updated: apiResult.updated != null ? String(apiResult.updated) : undefined,
+                portalData: {
+                  buyerName: apiResult.buyerName || "",
+                  providerCode: apiResult.providerExternalCode1 || "",
+                  providerName: apiResult.providerName || "",
+                  documentDate: apiResult.documentDate || "",
+                  deliveryStatus: apiResult.deliveryStatus || "",
+                  canceled: apiResult.canceled != null ? String(apiResult.canceled) : "",
+                  updated: apiResult.updated != null ? String(apiResult.updated) : "",
+                  synchronizationDate: apiResult.synchronizationDate || "",
+                },
+              } : {}),
+            },
           });
-          continue;
         }
 
-        batchUpdates.push({
-          id: target.id,
-          updates: {
-            status: apiResult.status === "found" ? "synced"
-              : apiResult.status === "not_found" ? "not_found"
-              : apiResult.status === "supplier_not_exists" ? "supplier_not_exists"
-              : "error",
-            statusMessage: apiResult.error || (apiResult.status === "found" ? `Sincronizada (${apiResult.syncStatus})` : apiResult.status === "not_found" ? "OC no encontrada" : "Proveedor no existe"),
-            // Map portal data including dates
-            ...(apiResult.status === "found" ? {
-              buyer_name: apiResult.buyerName || target.buyer_name,
-              provider_name: apiResult.providerName || target.provider_name,
-              document_date: apiResult.documentDate || undefined,
-              synchronization_date: apiResult.synchronizationDate || undefined,
-              delivery_status: apiResult.deliveryStatus || undefined,
-              canceled: apiResult.canceled != null ? String(apiResult.canceled) : undefined,
-              updated: apiResult.updated != null ? String(apiResult.updated) : undefined,
-              portalData: {
-                buyerName: apiResult.buyerName || "",
-                providerCode: apiResult.providerExternalCode1 || "",
-                providerName: apiResult.providerName || "",
-                documentDate: apiResult.documentDate || "",
-                deliveryStatus: apiResult.deliveryStatus || "",
-                canceled: apiResult.canceled != null ? String(apiResult.canceled) : "",
-                updated: apiResult.updated != null ? String(apiResult.updated) : "",
-                synchronizationDate: apiResult.synchronizationDate || "",
-              },
-            } : {}),
-          },
-        });
-      }
+        updateRecordsBatch(batchUpdates);
 
-      // Apply all updates
-      updateRecordsBatch(batchUpdates);
+        // Accumulate summary
+        if (result.summary) {
+          globalSummary.total += result.summary.total;
+          globalSummary.found += result.summary.found;
+          globalSummary.not_found += result.summary.not_found;
+          globalSummary.supplier_not_exists += result.summary.supplier_not_exists;
+          globalSummary.errors += result.summary.errors;
+        }
 
-      // Show summary toast with batch info
-      if (result.summary) {
-        const s = result.summary;
-        const batchMsg = result.batchInfo
-          ? ` (${result.batchInfo.totalBatches} lotes de ${result.batchInfo.batchSize})`
-          : "";
-        toast.success(
-          `Verificación completada${batchMsg}: ${s.found} sincronizadas, ${s.not_found} no encontradas, ${s.supplier_not_exists} proveedor no existe, ${s.errors} errores`,
-          { position: "bottom-left", duration: 8000 }
+        processedCount += batchTargets.length;
+        setProgress({ current: processedCount, total: targets.length });
+
+      } catch (err: any) {
+        const errorMsg = err?.message || "Error desconocido";
+
+        // Handle communication failure alerts
+        if (errorMsg.includes("COMMUNICATION_FAILURE_TOKEN")) {
+          (window as any).__showCommFailure?.("token");
+          setIsProcessing(false);
+          return;
+        } else if (errorMsg.includes("COMMUNICATION_FAILURE_SERVICE")) {
+          (window as any).__showCommFailure?.("service");
+          setIsProcessing(false);
+          return;
+        } else if (errorMsg.includes("NO_CONNECTION_503")) {
+          toast.error("No hay conexión con el servidor", { position: "bottom-left", duration: 6000 });
+          setIsProcessing(false);
+          return;
+        }
+
+        // Mark this batch's records as error
+        const errorUpdates = batchTargets.map(r => ({
+          id: r.id,
+          updates: { status: "error" as const, statusMessage: `Error lote ${batchIndex + 1}: ${errorMsg}` },
+        }));
+        updateRecordsBatch(errorUpdates);
+
+        globalSummary.errors += batchTargets.length;
+        globalSummary.total += batchTargets.length;
+        processedCount += batchTargets.length;
+        setProgress({ current: processedCount, total: targets.length });
+
+        // Show error but continue with next batch
+        toast.error(
+          `Error en lote ${batchIndex + 1} de ${totalBatches}: ${errorMsg}`,
+          { position: "bottom-left", duration: 5000 }
         );
       }
 
-      // Show sync rules if available and there are unsynchronized orders
-      if (result.clientInfo?.syncRules && (result.summary.not_found > 0 || result.summary.supplier_not_exists > 0)) {
+      // Wait between batches (except after the last batch)
+      if (batchIndex < totalBatches - 1 && !cancelRef.current) {
+        // Show waiting toast
         toast.info(
-          `Reglas de sincronización: ${result.clientInfo.syncRules}`,
-          { position: "bottom-left", duration: 10000 }
+          `Esperando ${batchDelaySeconds}s antes del lote ${batchIndex + 2} de ${totalBatches}...`,
+          { position: "bottom-left", duration: batchDelaySeconds * 1000 }
         );
+        await delay(batchDelaySeconds * 1000);
       }
-
-      setProgress({ current: targets.length, total: targets.length });
-    } catch (err: any) {
-      const errorMsg = err?.message || "Error desconocido";
-      
-      // Handle communication failure alerts (blocking popup)
-      if (errorMsg.includes("COMMUNICATION_FAILURE_TOKEN")) {
-        (window as any).__showCommFailure?.("token");
-        return;
-      } else if (errorMsg.includes("COMMUNICATION_FAILURE_SERVICE")) {
-        (window as any).__showCommFailure?.("service");
-        return;
-      } else if (errorMsg.includes("NO_CONNECTION_503")) {
-        toast.error("No hay conexión con el servidor", { position: "bottom-left", duration: 6000 });
-      } else {
-        toast.error(`Error en verificación: ${errorMsg}`, { position: "bottom-left", duration: 6000 });
-      }
-
-      // Mark all as error
-      const errorUpdates = targets.map(r => ({
-        id: r.id,
-        updates: { status: "error" as const, statusMessage: errorMsg },
-      }));
-      updateRecordsBatch(errorUpdates);
-    } finally {
-      setIsProcessing(false);
     }
-  }, [records, selectedRecords, updateRecordsBatch, setIsProcessing, setProgress, verifyBatchMutation, clientKey]);
 
-  // Use the new batch synchronization endpoint
+    // Final summary toast
+    const s = globalSummary;
+    toast.success(
+      `Verificación completada (${totalBatches} lotes): ${s.found} sincronizadas, ${s.not_found} no encontradas, ${s.supplier_not_exists} proveedor no existe, ${s.errors} errores`,
+      { position: "bottom-left", duration: 8000 }
+    );
+
+    // Show sync rules if available and there are unsynchronized orders
+    if (syncRules && (s.not_found > 0 || s.supplier_not_exists > 0)) {
+      toast.info(
+        `Reglas de sincronización: ${syncRules}`,
+        { position: "bottom-left", duration: 10000 }
+      );
+    }
+
+    setProgress({ current: targets.length, total: targets.length });
+    setIsProcessing(false);
+  }, [records, selectedRecords, updateRecordsBatch, setIsProcessing, setProgress, verifyBatchMutation, clientKey, batchConfigQuery.data]);
+
+  // Batch synchronization - also frontend-driven
   const synchronizeBatchMutation = trpc.egixia.synchronizeBatch.useMutation();
 
   const synchronizeBatch = useCallback(async (recordsToSync?: OCRecord[]) => {
-    // Use selected records if no specific records provided
     const targets = recordsToSync || records.filter(r => selectedRecords.has(r.id));
-    
-    // Send ALL selected records regardless of status (user confirmed re-sync if needed)
     const toSync = targets;
-    
+
     if (toSync.length === 0) {
       toast.warning("No hay registros seleccionados para sincronizar", { position: "bottom-left" });
       return { success: 0, failed: 0, skipped: 0 };
     }
 
+    cancelRef.current = false;
+
+    // Get batch config
+    const batchSize = batchConfigQuery.data?.batchSize ?? 10;
+    const batchDelaySeconds = batchConfigQuery.data?.batchDelaySeconds ?? 3;
+    const totalBatches = Math.ceil(toSync.length / batchSize);
+
     setIsProcessing(true);
     setProgress({ current: 0, total: toSync.length });
 
-    try {
-      // Call the batch synchronization endpoint (backend handles batching + delays)
-      const result = await synchronizeBatchMutation.mutateAsync({
-        orders: toSync.map(r => ({
-          buyerExternalCode: r.buyer_external_code,
-          purchaseOrderNumber: r.purchase_order_number,
-          sendEmails: false,
-        })),
-        clientKey: clientKey || undefined,
-      });
-
-      const successCount = result.summary.success;
-      const failedCount = result.summary.failed;
-
-      // Update records with sync results
-      for (let i = 0; i < toSync.length; i++) {
-        const record = toSync[i];
-        const syncResult = result.results[i];
-
-        if (syncResult && !syncResult.success) {
-          updateRecord(record.id, {
-            statusMessage: syncResult.errorMessage || syncResult.error || "Error al sincronizar",
-          });
-        }
-      }
-
-      setProgress({ current: toSync.length, total: toSync.length });
-
-      // Re-verify synchronized orders to update their status
-      if (successCount > 0) {
-        const successfulOrders = toSync.filter((_, i) => result.results[i]?.success);
-        if (successfulOrders.length > 0) {
-          await verifyBatch(successfulOrders);
-        }
-      }
-
-      // Show summary toast with batch info
-      const total = toSync.length;
-      const batchMsg = result.batchInfo
-        ? ` (${result.batchInfo.totalBatches} lotes de ${result.batchInfo.batchSize})`
-        : "";
-      if (successCount === total) {
-        toast.success(`${successCount} de ${total} órdenes sincronizadas correctamente${batchMsg}`, { position: "bottom-left", duration: 5000 });
-      } else if (successCount > 0) {
-        toast.warning(`${successCount} de ${total} órdenes sincronizadas correctamente${batchMsg}`, { position: "bottom-left", duration: 5000 });
-      } else {
-        toast.error(`0 de ${total} órdenes sincronizadas`, { position: "bottom-left", duration: 5000 });
-      }
-
-      return { success: successCount, failed: failedCount, skipped: 0 };
-    } catch (err: any) {
-      const syncErrMsg = err?.message || "Error al sincronizar";
-      // Handle communication failure alerts (blocking popup)
-      if (syncErrMsg.includes("COMMUNICATION_FAILURE_TOKEN")) {
-        (window as any).__showCommFailure?.("token");
-        setIsProcessing(false);
-        return { success: 0, failed: toSync.length, skipped: 0 };
-      } else if (syncErrMsg.includes("COMMUNICATION_FAILURE_SERVICE")) {
-        (window as any).__showCommFailure?.("service");
-        setIsProcessing(false);
-        return { success: 0, failed: toSync.length, skipped: 0 };
-      }
-
-      toast.error(`Error en sincronización: ${syncErrMsg}`, { position: "bottom-left", duration: 6000 });
-
-      // Mark all as error
-      const errorUpdates = toSync.map(r => ({
-        id: r.id,
-        updates: { statusMessage: syncErrMsg },
-      }));
-      updateRecordsBatch(errorUpdates);
-
-      setIsProcessing(false);
-      return { success: 0, failed: toSync.length, skipped: 0 };
-    } finally {
-      setIsProcessing(false);
+    if (totalBatches > 1) {
+      toast.info(
+        `Sincronizando ${toSync.length} registros en ${totalBatches} lotes de ${batchSize} (espera de ${batchDelaySeconds}s entre lotes)`,
+        { position: "bottom-left", duration: 5000 }
+      );
     }
-  }, [records, selectedRecords, updateRecord, updateRecordsBatch, setIsProcessing, setProgress, synchronizeBatchMutation, verifyBatch, clientKey]);
+
+    let totalSuccess = 0;
+    let totalFailed = 0;
+    let processedCount = 0;
+    const allSuccessfulOrders: OCRecord[] = [];
+
+    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+      if (cancelRef.current) {
+        toast.warning("Sincronización cancelada por el usuario", { position: "bottom-left" });
+        break;
+      }
+
+      const batchStart = batchIndex * batchSize;
+      const batchEnd = Math.min(batchStart + batchSize, toSync.length);
+      const batchTargets = toSync.slice(batchStart, batchEnd);
+
+      try {
+        const result = await synchronizeBatchMutation.mutateAsync({
+          orders: batchTargets.map(r => ({
+            buyerExternalCode: r.buyer_external_code,
+            purchaseOrderNumber: r.purchase_order_number,
+            sendEmails: false,
+          })),
+          clientKey: clientKey || undefined,
+        });
+
+        const batchSuccess = result.summary.success;
+        const batchFailed = result.summary.failed;
+        totalSuccess += batchSuccess;
+        totalFailed += batchFailed;
+
+        // Update records with sync results
+        for (let i = 0; i < batchTargets.length; i++) {
+          const record = batchTargets[i];
+          const syncResult = result.results[i];
+
+          if (syncResult && !syncResult.success) {
+            updateRecord(record.id, {
+              statusMessage: syncResult.errorMessage || syncResult.error || "Error al sincronizar",
+            });
+          } else if (syncResult?.success) {
+            allSuccessfulOrders.push(record);
+          }
+        }
+
+        processedCount += batchTargets.length;
+        setProgress({ current: processedCount, total: toSync.length });
+
+      } catch (err: any) {
+        const syncErrMsg = err?.message || "Error al sincronizar";
+        if (syncErrMsg.includes("COMMUNICATION_FAILURE_TOKEN")) {
+          (window as any).__showCommFailure?.("token");
+          setIsProcessing(false);
+          return { success: totalSuccess, failed: totalFailed + (toSync.length - processedCount), skipped: 0 };
+        } else if (syncErrMsg.includes("COMMUNICATION_FAILURE_SERVICE")) {
+          (window as any).__showCommFailure?.("service");
+          setIsProcessing(false);
+          return { success: totalSuccess, failed: totalFailed + (toSync.length - processedCount), skipped: 0 };
+        }
+
+        toast.error(`Error en lote sync ${batchIndex + 1}: ${syncErrMsg}`, { position: "bottom-left", duration: 5000 });
+
+        const errorUpdates = batchTargets.map(r => ({
+          id: r.id,
+          updates: { statusMessage: `Error lote sync ${batchIndex + 1}: ${syncErrMsg}` },
+        }));
+        updateRecordsBatch(errorUpdates);
+
+        totalFailed += batchTargets.length;
+        processedCount += batchTargets.length;
+        setProgress({ current: processedCount, total: toSync.length });
+      }
+
+      // Wait between batches
+      if (batchIndex < totalBatches - 1 && !cancelRef.current) {
+        toast.info(
+          `Esperando ${batchDelaySeconds}s antes del lote sync ${batchIndex + 2} de ${totalBatches}...`,
+          { position: "bottom-left", duration: batchDelaySeconds * 1000 }
+        );
+        await delay(batchDelaySeconds * 1000);
+      }
+    }
+
+    setProgress({ current: toSync.length, total: toSync.length });
+
+    // Re-verify synchronized orders to update their status
+    if (allSuccessfulOrders.length > 0) {
+      await verifyBatch(allSuccessfulOrders);
+    }
+
+    // Show summary toast
+    const total = toSync.length;
+    const batchMsg = totalBatches > 1 ? ` (${totalBatches} lotes de ${batchSize})` : "";
+    if (totalSuccess === total) {
+      toast.success(`${totalSuccess} de ${total} órdenes sincronizadas correctamente${batchMsg}`, { position: "bottom-left", duration: 5000 });
+    } else if (totalSuccess > 0) {
+      toast.warning(`${totalSuccess} de ${total} órdenes sincronizadas correctamente${batchMsg}`, { position: "bottom-left", duration: 5000 });
+    } else {
+      toast.error(`0 de ${total} órdenes sincronizadas`, { position: "bottom-left", duration: 5000 });
+    }
+
+    setIsProcessing(false);
+    return { success: totalSuccess, failed: totalFailed, skipped: 0 };
+  }, [records, selectedRecords, updateRecord, updateRecordsBatch, setIsProcessing, setProgress, synchronizeBatchMutation, verifyBatch, clientKey, batchConfigQuery.data]);
 
   return { verifyBatch, synchronizeBatch };
 }

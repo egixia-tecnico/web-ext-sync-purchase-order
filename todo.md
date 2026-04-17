@@ -555,3 +555,14 @@
 - [x] Causa: objetos en results con formas inconsistentes (algunos con canceled/updated boolean, otros sin esos campos) → superjson falla al deserializar
 - [x] Solución: normalizar todos los objetos del array results a la misma forma con String()/Boolean() explícitos y null en vez de undefined
 - [x] Corregido también en useOCVerification: canceled y updated ahora se convierten a String antes de asignar al OCRecord
+
+## Bug Persistente: Unable to transform response (volumen grande)
+
+- [x] Causa raíz: 504 Gateway Timeout (300s+) al enviar 357+ OC en una sola petición tRPC
+- [x] Solución: batching movido al frontend (useOCVerification) → cada lote es una petición tRPC separada
+- [x] Backend simplificado: verifyPurchaseOrders solo procesa las OC que recibe (sin batching interno)
+- [x] Nuevo endpoint getBatchConfig para obtener configuración de lotes del cliente
+- [x] Progreso en tiempo real: toast "Procesando X registros en Y lotes de Z"
+- [x] Espera visible entre lotes: toast "Esperando Ns antes del lote X+1 de Y"
+- [x] Resumen final con conteo por estado y cantidad de lotes
+- [x] 24 tests pasando, TypeScript sin errores
