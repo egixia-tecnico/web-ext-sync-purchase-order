@@ -549,3 +549,9 @@
 - [x] Garantizar log siempre: el finally guarda log incluso cuando la petición falla antes de obtener respuesta
 - [x] Retención de logs: 20 por estado (success/error/timeout) = 60 total máximo por cliente
 - [ ] Mostrar errorDetail en la UI del log de integraciones (pendiente)
+
+## Bug: Unable to transform response from server
+
+- [x] Causa: objetos en results con formas inconsistentes (algunos con canceled/updated boolean, otros sin esos campos) → superjson falla al deserializar
+- [x] Solución: normalizar todos los objetos del array results a la misma forma con String()/Boolean() explícitos y null en vez de undefined
+- [x] Corregido también en useOCVerification: canceled y updated ahora se convierten a String antes de asignar al OCRecord

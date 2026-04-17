@@ -643,8 +643,27 @@ export const appRouter = router({
           executionTimeMs: 0,
         });
 
+        // Normalize all result objects to have the same shape (superjson requires consistent types)
+        const normalizedResults = results.map((r) => ({
+          purchaseOrderId: String(r.purchaseOrderId ?? ""),
+          providerExternalCode1: String(r.providerExternalCode1 ?? ""),
+          providerExternalCode2: String(r.providerExternalCode2 ?? ""),
+          providerExternalCode3: String(r.providerExternalCode3 ?? ""),
+          buyerCode: r.buyerCode != null ? String(r.buyerCode) : null,
+          buyerName: r.buyerName != null ? String(r.buyerName) : null,
+          providerName: r.providerName != null ? String(r.providerName) : null,
+          status: String(r.status ?? "error"),
+          syncStatus: r.syncStatus != null ? String(r.syncStatus) : null,
+          documentDate: r.documentDate != null ? String(r.documentDate) : null,
+          synchronizationDate: r.synchronizationDate != null ? String(r.synchronizationDate) : null,
+          deliveryStatus: r.deliveryStatus != null ? String(r.deliveryStatus) : null,
+          canceled: r.canceled != null ? Boolean(r.canceled) : null,
+          updated: r.updated != null ? Boolean(r.updated) : null,
+          error: r.error != null ? String(r.error) : null,
+        }));
+
         return {
-          results,
+          results: normalizedResults,
           summary,
           batchInfo: {
             batchSize,
@@ -652,9 +671,9 @@ export const appRouter = router({
             totalBatches,
           },
           clientInfo: credentials ? {
-            name: credentials.clientName,
-            primaryColor: credentials.primaryColor,
-            syncRules: credentials.syncRules,
+            name: String(credentials.clientName ?? ""),
+            primaryColor: String(credentials.primaryColor ?? ""),
+            syncRules: credentials.syncRules != null ? String(credentials.syncRules) : null,
           } : null,
         };
       }),
