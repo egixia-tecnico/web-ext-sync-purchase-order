@@ -231,6 +231,7 @@ export async function saveIntegrationLog(data: {
   token?: string;
   authPrefix?: string;
   status: string;
+  errorDetail?: string;
 }) {
   const db = await getDb();
   if (!db) return false;
@@ -245,6 +246,7 @@ export async function saveIntegrationLog(data: {
       token: data.token ? data.token.substring(0, 10) + "..." : null, // Partial token
       authPrefix: data.authPrefix || "Bearer",
       status: data.status,
+      errorDetail: data.errorDetail || null,
     });
 
     // Clean old logs - keep only last 10 per integration type (30 total max)

@@ -527,3 +527,10 @@
 
 - [x] Bug: al activar un cliente en el formulario se inactivan los demás → eliminada lógica de desactivación exclusiva en createClient, updateClient y setActiveClient
 - [x] Bug: cliente "Manuelita TEST" quedó inactivo por el bug anterior → reactivado via script (ambos clientes ahora activos)
+
+## Correcciones Urgentes 2026-04-17
+
+- [x] Quitar restricción de seguridad en visualización de log de integraciones e historial → acceso directo sin login (solo Gestión de Clientes requiere @egixia.com)
+- [x] Corregir error HTML con símbolo > → callEgixiaApi detecta respuestas HTML y lanza error descriptivo
+- [x] Limpiar tablas verification_logs (69 registros) e integration_logs (22 registros)
+- [x] Campo errorDetail agregado al schema de integration_logs y propagado desde callEgixiaApi

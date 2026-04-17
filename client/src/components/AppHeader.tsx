@@ -3,8 +3,8 @@
  * Design: "Operational Clarity" - barra superior con color primario configurable
  * Incluye indicador de estado de conexión y menú desplegable
  * 
- * Control de acceso: El menú de engranaje solo es accesible con sesión @egixia.com activa.
- * Si no hay sesión, al hacer clic en cualquier opción redirige al login por correo.
+ * Acceso abierto: historial y logs son accesibles directamente sin login.
+ * Solo "Gestión de Clientes" requiere sesión @egixia.com.
  */
 import { useThemeColor } from "@/contexts/ThemeColorContext";
 import { useOCSync } from "@/contexts/OCSyncContext";
@@ -31,35 +31,20 @@ export default function AppHeader({ onHistoryClick, onLogsClick }: AppHeaderProp
   const { connectionStatus } = useOCSync();
   const [, navigate] = useLocation();
 
-  // Verificar sesión admin activa
+  // Verificar sesión admin activa (solo para Gestión de Clientes)
   const { data: adminSession } = trpc.auth.checkAdminSession.useQuery(undefined, {
     retry: false,
-    staleTime: 30_000, // revalidar cada 30 segundos
+    staleTime: 30_000,
   });
 
   const isAdmin = adminSession?.isAdmin === true;
 
   /**
-   * Navegar a una ruta protegida.
-   * Si hay sesión admin activa: navega directamente.
-   * Si NO hay sesión: redirige al login con returnPath para volver después de autenticarse.
+   * Navegar a una ruta protegida (solo Gestión de Clientes requiere @egixia.com).
    */
   const handleProtectedNav = (targetPath: string, returnPath: string) => {
     if (isAdmin) {
       navigate(targetPath);
-    } else {
-      navigate(`/admin/login?returnPath=${encodeURIComponent(returnPath)}`);
-    }
-  };
-
-  /**
-   * Ejecutar acción protegida (para modales como historial y logs).
-   * Si hay sesión admin activa: ejecuta la acción directamente.
-   * Si NO hay sesión: redirige al login con returnPath especial.
-   */
-  const handleProtectedAction = (action: () => void, returnPath: string) => {
-    if (isAdmin) {
-      action();
     } else {
       navigate(`/admin/login?returnPath=${encodeURIComponent(returnPath)}`);
     }
@@ -122,60 +107,54 @@ export default function AppHeader({ onHistoryClick, onLogsClick }: AppHeaderProp
             Powered by Egixia
           </span>
           
-          {/* Dropdown menu - requiere sesión @egixia.com */}
+          {/* Dropdown menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 className="p-2 rounded-lg hover:bg-white/15 transition-colors text-white/80 hover:text-white flex items-center gap-1"
-                title={isAdmin ? "Menú de administración" : "Acceso restringido - requiere cuenta @egixia.com"}
+                title="Menú"
               >
                 <Settings2 className="w-4 h-4" />
                 <ChevronDown className="w-3 h-3" />
-                {/* Indicador visual de sesión activa */}
                 {isAdmin && (
                   <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-green-400" />
                 )}
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              {/* Indicador de estado de autenticación */}
-              {isAdmin ? (
-                <div className="px-2 py-1.5 text-[10px] text-muted-foreground flex items-center gap-1.5 border-b mb-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
-                  Sesión activa: {adminSession?.email}
-                </div>
-              ) : (
-                <div className="px-2 py-1.5 text-[10px] text-amber-600 flex items-center gap-1.5 border-b mb-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
-                  Requiere cuenta @egixia.com
-                </div>
-              )}
-
+              {/* Historial - acceso libre */}
               <DropdownMenuItem
-                onClick={() => handleProtectedNav("/clients", "/clients")}
-                className="cursor-pointer"
-              >
-                <Users className="w-4 h-4 mr-2" />
-                Gestión de Clientes
-              </DropdownMenuItem>
-
-              <DropdownMenuItem
-                onClick={() => handleProtectedAction(onHistoryClick, "/?openHistory=true")}
+                onClick={onHistoryClick}
                 className="cursor-pointer"
               >
                 <History className="w-4 h-4 mr-2" />
                 Historial de Verificaciones
               </DropdownMenuItem>
 
+              {/* Log de Integraciones - acceso libre */}
               {onLogsClick && (
                 <DropdownMenuItem
-                  onClick={() => handleProtectedAction(onLogsClick, "/?openLogs=true")}
+                  onClick={onLogsClick}
                   className="cursor-pointer"
                 >
                   <FileText className="w-4 h-4 mr-2" />
                   Log de Integraciones
                 </DropdownMenuItem>
               )}
+
+              <DropdownMenuSeparator />
+
+              {/* Gestión de Clientes - requiere @egixia.com */}
+              <DropdownMenuItem
+                onClick={() => handleProtectedNav("/clients", "/clients")}
+                className="cursor-pointer"
+              >
+                <Users className="w-4 h-4 mr-2" />
+                Gestión de Clientes
+                {!isAdmin && (
+                  <span className="ml-auto text-[9px] text-amber-500 font-medium">Admin</span>
+                )}
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

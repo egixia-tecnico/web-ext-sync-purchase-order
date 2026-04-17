@@ -90,6 +90,7 @@ export const integrationLogs = mysqlTable("integration_logs", {
   token: varchar("token", { length: 50 }), // Partial token (first 10 chars)
   authPrefix: varchar("authPrefix", { length: 20 }).default("Bearer"), // e.g., "Bearer"
   status: varchar("status", { length: 20 }).notNull(), // "success", "error", "timeout"
+  errorDetail: text("errorDetail"), // Human-readable error message when status is "error" or "timeout"
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

@@ -1,0 +1,1 @@
+ALTER TABLE `integration_logs` ADD `errorDetail` text;

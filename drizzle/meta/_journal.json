@@ -71,6 +71,13 @@
       "when": 1772725795562,
       "tag": "0009_silky_siren",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1776445120937,
+      "tag": "0010_fat_namor",
+      "breakpoints": true
     }
   ]
 }

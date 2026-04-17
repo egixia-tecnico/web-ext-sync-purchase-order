@@ -194,6 +194,7 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
 
   let responseData: any;
   let status = "success";
+  let errorDetail: string | undefined;
 
   // Normalize endpoint key for failure tracking (strip query params)
   const endpointKey = endpoint.split('?')[0];
@@ -218,6 +219,19 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
+    // Detect HTML response (server returned error page instead of JSON)
+    const contentType = response.headers['content-type'] || '';
+    if (
+      contentType.includes('text/html') ||
+      (typeof response.data === 'string' && response.data.trimStart().startsWith('<'))
+    ) {
+      console.error(`[Egixia] Server returned HTML instead of JSON for ${url}. Content-Type: ${contentType}`);
+      status = "error";
+      errorDetail = `El servidor devolvió HTML en vez de JSON. Posible URL incorrecta o error de servidor. URL: ${url}`;
+      responseData = { error: "HTML_RESPONSE", url, contentType };
+      throw new Error(`El servidor devolvió una página HTML en vez de JSON. Verifique la URL base y las credenciales del cliente. URL: ${url}`);
+    }
+
     // Reset failure counter on success
     endpointFailureCount[endpointKey] = 0;
     responseData = response.data;
@@ -238,6 +252,7 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
     if (httpStatus === 403) {
       const serviceName = endpoint.split('/').pop() || endpoint;
       status = "error";
+      errorDetail = `HTTP 403: Sin permisos para ejecutar el servicio ${serviceName}`;
       responseData = { error: "Forbidden", status: 403 };
       throw new Error(`Hacen falta permisos para ejecutar el servicio ${serviceName}`);
     }
@@ -256,6 +271,9 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
     }
 
     status = err.code === 'ECONNABORTED' ? "timeout" : "error";
+    errorDetail = err.code === 'ECONNABORTED'
+      ? `Timeout: La petición tardó más de 70 segundos. Endpoint: ${endpoint}`
+      : `${err.message}${httpStatus ? ` (HTTP ${httpStatus})` : ''}${err.code ? ` [${err.code}]` : ''}`;
     responseData = { error: err.message, code: err.code, status: httpStatus };
     throw new Error(`Error en llamada a API: ${err.message}`);
   } finally {
@@ -271,6 +289,7 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
           token,
           authPrefix: "Bearer",
           status,
+          errorDetail,
         });
       }
     }
