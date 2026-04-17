@@ -534,3 +534,11 @@
 - [x] Corregir error HTML con símbolo > → callEgixiaApi detecta respuestas HTML y lanza error descriptivo
 - [x] Limpiar tablas verification_logs (69 registros) e integration_logs (22 registros)
 - [x] Campo errorDetail agregado al schema de integration_logs y propagado desde callEgixiaApi
+
+## UX - Pantalla de Acceso por Key
+
+- [x] Reemplazar pantalla "Identificador de Cliente Requerido" con formulario de ingreso de clientKey
+- [x] Validar el key ingresado contra la base de datos antes de redirigir (usa clients.getByKey)
+- [x] Si el key es válido y activo: redirigir a /?clientKey=xxx tras 800ms con feedback visual
+- [x] Si el key no existe: error inline rojo sin recargar la página
+- [x] Si el key existe pero está inactivo: mensaje amber con nombre de empresa
