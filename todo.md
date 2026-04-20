@@ -566,3 +566,16 @@
 - [x] Espera visible entre lotes: toast "Esperando Ns antes del lote X+1 de Y"
 - [x] Resumen final con conteo por estado y cantidad de lotes
 - [x] 24 tests pasando, TypeScript sin errores
+
+## Caso de Uso: Cancelación de Sincronización/Verificación en Progreso
+
+- [x] Agregar estado `isCancelling` y ref `cancelRef` en useOCVerification para señalizar cancelación
+- [x] Verificar `cancelRef` antes de cada lote en verifyBatch y synchronizeBatch
+- [x] Al cancelar verificación: detener inmediatamente, OC no procesadas vuelven a "pending"
+- [x] Al cancelar sincronización: detener inmediatamente, avanza a step 5 con resultados parciales
+- [x] Conservar OC procesadas exitosamente hasta el momento de cancelación
+- [x] Botón "Cancelar" rojo visible en ActionBar con barra de progreso durante verificación y sincronización
+- [x] Toast de resumen al cancelar: X de Y procesadas (N exitosas, M errores). Z pendientes
+- [x] Texto "Cancelando... finalizando lote actual" durante la cancelación
+- [x] Permitir continuar flujo normal con las OC ya procesadas
+- [x] 24 tests pasando, TypeScript sin errores

@@ -8,9 +8,14 @@
  * - Espera batchDelaySeconds entre cada lote
  * - Muestra progreso en tiempo real: "Procesando lote X de Y (N registros)"
  * 
- * Esto evita el 504 Gateway Timeout que ocurría al enviar 300+ OC en una sola petición.
+ * CANCELACIÓN:
+ * - El usuario puede cancelar en cualquier momento durante verificación o sincronización
+ * - Al cancelar: se detiene inmediatamente sin revertir resultados ya procesados
+ * - Las OC procesadas quedan disponibles para trabajar
+ * - Las OC no procesadas vuelven a estado "pending" (verificación) o se ignoran (sincronización)
+ * - Se muestra resumen de OC procesadas vs canceladas
  */
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useOCSync, type OCRecord } from "@/contexts/OCSyncContext";
 import { useClientKey } from "@/contexts/ClientKeyContext";
 import { trpc } from "@/lib/trpc";
@@ -23,12 +28,19 @@ export function useOCVerification() {
   const { records, updateRecord, updateRecordsBatch, setIsProcessing, setProgress, selectedRecords } = useOCSync();
   const { clientKey } = useClientKey();
   const cancelRef = useRef(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const verifyBatchMutation = trpc.egixia.verifyPurchaseOrders.useMutation();
   const batchConfigQuery = trpc.egixia.getBatchConfig.useQuery(
     { clientKey: clientKey || undefined },
     { enabled: !!clientKey, staleTime: 60000 }
   );
+
+  // Cancel the current process
+  const cancelProcess = useCallback(() => {
+    cancelRef.current = true;
+    setIsCancelling(true);
+  }, []);
 
   const verifyBatch = useCallback(async (recordsToVerify?: OCRecord[]) => {
     const targets = recordsToVerify || records.filter(r => selectedRecords.has(r.id));
@@ -38,6 +50,7 @@ export function useOCVerification() {
     }
 
     cancelRef.current = false;
+    setIsCancelling(false);
 
     // Get batch config (from cache or defaults)
     const batchSize = batchConfigQuery.data?.batchSize ?? 10;
@@ -68,10 +81,18 @@ export function useOCVerification() {
     // Accumulate global summary across batches
     const globalSummary = { total: 0, found: 0, not_found: 0, supplier_not_exists: 0, errors: 0 };
     let processedCount = 0;
+    let wasCancelled = false;
 
     for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
       if (cancelRef.current) {
-        toast.warning("Verificación cancelada por el usuario", { position: "bottom-left" });
+        wasCancelled = true;
+        // Mark remaining unprocessed records back to "pending"
+        const remainingTargets = targets.slice(batchIndex * batchSize);
+        const pendingUpdates = remainingTargets.map(r => ({
+          id: r.id,
+          updates: { status: "pending" as const, statusMessage: "Cancelado por el usuario" }
+        }));
+        updateRecordsBatch(pendingUpdates);
         break;
       }
 
@@ -167,14 +188,17 @@ export function useOCVerification() {
         if (errorMsg.includes("COMMUNICATION_FAILURE_TOKEN")) {
           (window as any).__showCommFailure?.("token");
           setIsProcessing(false);
+          setIsCancelling(false);
           return;
         } else if (errorMsg.includes("COMMUNICATION_FAILURE_SERVICE")) {
           (window as any).__showCommFailure?.("service");
           setIsProcessing(false);
+          setIsCancelling(false);
           return;
         } else if (errorMsg.includes("NO_CONNECTION_503")) {
           toast.error("No hay conexión con el servidor", { position: "bottom-left", duration: 6000 });
           setIsProcessing(false);
+          setIsCancelling(false);
           return;
         }
 
@@ -210,10 +234,19 @@ export function useOCVerification() {
 
     // Final summary toast
     const s = globalSummary;
-    toast.success(
-      `Verificación completada (${totalBatches} lotes): ${s.found} sincronizadas, ${s.not_found} no encontradas, ${s.supplier_not_exists} proveedor no existe, ${s.errors} errores`,
-      { position: "bottom-left", duration: 8000 }
-    );
+    const cancelledCount = targets.length - processedCount;
+
+    if (wasCancelled) {
+      toast.warning(
+        `Verificación cancelada: ${processedCount} de ${targets.length} registros procesados (${s.found} sincronizadas, ${s.not_found} no encontradas, ${s.supplier_not_exists} proveedor no existe, ${s.errors} errores). ${cancelledCount} registros pendientes.`,
+        { position: "bottom-left", duration: 10000 }
+      );
+    } else {
+      toast.success(
+        `Verificación completada (${totalBatches} lotes): ${s.found} sincronizadas, ${s.not_found} no encontradas, ${s.supplier_not_exists} proveedor no existe, ${s.errors} errores`,
+        { position: "bottom-left", duration: 8000 }
+      );
+    }
 
     // Show sync rules if available and there are unsynchronized orders
     if (syncRules && (s.not_found > 0 || s.supplier_not_exists > 0)) {
@@ -223,8 +256,11 @@ export function useOCVerification() {
       );
     }
 
-    setProgress({ current: targets.length, total: targets.length });
+    setProgress({ current: processedCount, total: targets.length });
     setIsProcessing(false);
+    setIsCancelling(false);
+
+    return { wasCancelled, processedCount, cancelledCount };
   }, [records, selectedRecords, updateRecordsBatch, setIsProcessing, setProgress, verifyBatchMutation, clientKey, batchConfigQuery.data]);
 
   // Batch synchronization - also frontend-driven
@@ -236,10 +272,11 @@ export function useOCVerification() {
 
     if (toSync.length === 0) {
       toast.warning("No hay registros seleccionados para sincronizar", { position: "bottom-left" });
-      return { success: 0, failed: 0, skipped: 0 };
+      return { success: 0, failed: 0, skipped: 0, wasCancelled: false };
     }
 
     cancelRef.current = false;
+    setIsCancelling(false);
 
     // Get batch config
     const batchSize = batchConfigQuery.data?.batchSize ?? 10;
@@ -259,11 +296,12 @@ export function useOCVerification() {
     let totalSuccess = 0;
     let totalFailed = 0;
     let processedCount = 0;
+    let wasCancelled = false;
     const allSuccessfulOrders: OCRecord[] = [];
 
     for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
       if (cancelRef.current) {
-        toast.warning("Sincronización cancelada por el usuario", { position: "bottom-left" });
+        wasCancelled = true;
         break;
       }
 
@@ -308,11 +346,13 @@ export function useOCVerification() {
         if (syncErrMsg.includes("COMMUNICATION_FAILURE_TOKEN")) {
           (window as any).__showCommFailure?.("token");
           setIsProcessing(false);
-          return { success: totalSuccess, failed: totalFailed + (toSync.length - processedCount), skipped: 0 };
+          setIsCancelling(false);
+          return { success: totalSuccess, failed: totalFailed + (toSync.length - processedCount), skipped: 0, wasCancelled: false };
         } else if (syncErrMsg.includes("COMMUNICATION_FAILURE_SERVICE")) {
           (window as any).__showCommFailure?.("service");
           setIsProcessing(false);
-          return { success: totalSuccess, failed: totalFailed + (toSync.length - processedCount), skipped: 0 };
+          setIsCancelling(false);
+          return { success: totalSuccess, failed: totalFailed + (toSync.length - processedCount), skipped: 0, wasCancelled: false };
         }
 
         toast.error(`Error en lote sync ${batchIndex + 1}: ${syncErrMsg}`, { position: "bottom-left", duration: 5000 });
@@ -338,27 +378,36 @@ export function useOCVerification() {
       }
     }
 
-    setProgress({ current: toSync.length, total: toSync.length });
+    setProgress({ current: processedCount, total: toSync.length });
 
-    // Re-verify synchronized orders to update their status
+    // Show summary toast
+    const cancelledCount = toSync.length - processedCount;
+
+    if (wasCancelled) {
+      toast.warning(
+        `Sincronización cancelada: ${processedCount} de ${toSync.length} registros procesados (${totalSuccess} exitosos, ${totalFailed} fallidos). ${cancelledCount} registros no procesados.`,
+        { position: "bottom-left", duration: 10000 }
+      );
+    } else {
+      const batchMsg = totalBatches > 1 ? ` (${totalBatches} lotes de ${batchSize})` : "";
+      if (totalSuccess === toSync.length) {
+        toast.success(`${totalSuccess} de ${toSync.length} órdenes sincronizadas correctamente${batchMsg}`, { position: "bottom-left", duration: 5000 });
+      } else if (totalSuccess > 0) {
+        toast.warning(`${totalSuccess} de ${toSync.length} órdenes sincronizadas correctamente${batchMsg}`, { position: "bottom-left", duration: 5000 });
+      } else {
+        toast.error(`0 de ${toSync.length} órdenes sincronizadas`, { position: "bottom-left", duration: 5000 });
+      }
+    }
+
+    // Re-verify synchronized orders to update their status (only if there were successes)
     if (allSuccessfulOrders.length > 0) {
       await verifyBatch(allSuccessfulOrders);
     }
 
-    // Show summary toast
-    const total = toSync.length;
-    const batchMsg = totalBatches > 1 ? ` (${totalBatches} lotes de ${batchSize})` : "";
-    if (totalSuccess === total) {
-      toast.success(`${totalSuccess} de ${total} órdenes sincronizadas correctamente${batchMsg}`, { position: "bottom-left", duration: 5000 });
-    } else if (totalSuccess > 0) {
-      toast.warning(`${totalSuccess} de ${total} órdenes sincronizadas correctamente${batchMsg}`, { position: "bottom-left", duration: 5000 });
-    } else {
-      toast.error(`0 de ${total} órdenes sincronizadas`, { position: "bottom-left", duration: 5000 });
-    }
-
     setIsProcessing(false);
-    return { success: totalSuccess, failed: totalFailed, skipped: 0 };
+    setIsCancelling(false);
+    return { success: totalSuccess, failed: totalFailed, skipped: 0, wasCancelled };
   }, [records, selectedRecords, updateRecord, updateRecordsBatch, setIsProcessing, setProgress, synchronizeBatchMutation, verifyBatch, clientKey, batchConfigQuery.data]);
 
-  return { verifyBatch, synchronizeBatch };
+  return { verifyBatch, synchronizeBatch, cancelProcess, isCancelling };
 }

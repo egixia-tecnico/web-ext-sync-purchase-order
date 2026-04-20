@@ -4,6 +4,9 @@
  * Step 3 (Resultados): "Exportar" + "Sincronizar X de Y" → si hay OC ya sincronizadas, pide confirmación
  * Step 4 (Sincronizar): Progreso automático de sincronización REAL → al completar pasa a Step 5
  * Step 5 (Finalizado): Grid actualizado con "Exportar resultados", sin opción de re-sincronizar
+ * 
+ * CANCELACIÓN: Botón "Cancelar" visible durante verificación (step 2) y sincronización (step 4)
+ * Al cancelar: detiene inmediatamente, conserva resultados parciales, muestra resumen
  */
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -26,7 +29,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Search, Download, ArrowLeft, RefreshCw,
-  Loader2, AlertTriangle,
+  Loader2, AlertTriangle, XCircle,
 } from "lucide-react";
 
 export default function ActionBar() {
@@ -35,7 +38,7 @@ export default function ActionBar() {
     selectedRecords, selectAll, deselectAll, selectNonSynced, selectMultipleStatuses,
     currentStep, setCurrentStep, goToNextStep, goToPrevStep,
   } = useOCSync();
-  const { verifyBatch, synchronizeBatch } = useOCVerification();
+  const { verifyBatch, synchronizeBatch, cancelProcess, isCancelling } = useOCVerification();
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
   const hasAutoSelectedForStep3 = useRef(false);
@@ -82,7 +85,13 @@ export default function ActionBar() {
     }
 
     const toVerify = records.filter(r => selectedRecords.has(r.id));
-    await verifyBatch(toVerify);
+    const result = await verifyBatch(toVerify);
+
+    // If cancelled, stay on step 2 so user can see partial results and re-verify
+    if (result?.wasCancelled) {
+      // Stay on current step - user can see partial results
+      return;
+    }
 
     // After verification, advance to step 3 (Resultados)
     setCurrentStep(3);
@@ -137,10 +146,20 @@ export default function ActionBar() {
     }
 
     // Execute real synchronization (includes already-synced if user confirmed)
-    await synchronizeBatch(toSync);
+    const result = await synchronizeBatch(toSync);
+
+    // If cancelled, go to step 5 with partial results (user can export what was processed)
+    if (result?.wasCancelled) {
+      setCurrentStep(5);
+      return;
+    }
 
     // After sync, advance to step 5 (Finalizado) with updated grid
     setCurrentStep(5);
+  };
+
+  const handleCancel = () => {
+    cancelProcess();
   };
 
   const handleExport = () => {
@@ -205,9 +224,25 @@ export default function ActionBar() {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-medium text-muted-foreground flex items-center gap-2">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: `rgb(${r}, ${g}, ${b})` }} />
-                  {currentStep === 4 ? "Sincronizando" : "Procesando"} {progress.current} de {progress.total}...
+                  {isCancelling
+                    ? "Cancelando... finalizando lote actual"
+                    : `${currentStep === 4 ? "Sincronizando" : "Verificando"} ${progress.current} de ${progress.total}...`
+                  }
                 </span>
-                <span className="text-xs font-mono text-muted-foreground">{progressPercent}%</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-mono text-muted-foreground">{progressPercent}%</span>
+                  {!isCancelling && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCancel}
+                      className="gap-1.5 text-xs h-7 px-3 border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                      Cancelar
+                    </Button>
+                  )}
+                </div>
               </div>
               <Progress value={progressPercent} className="h-2" />
             </motion.div>
@@ -231,15 +266,17 @@ export default function ActionBar() {
               Verificar pendientes ({pendingCount})
             </Button>
             <div className="flex-1" />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={goToPrevStep}
-              className="gap-1.5 text-xs"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              Volver a cargar
-            </Button>
+            {!isProcessing && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={goToPrevStep}
+                className="gap-1.5 text-xs"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                Volver a cargar
+              </Button>
+            )}
           </div>
         )}
 
@@ -284,16 +321,19 @@ export default function ActionBar() {
           </div>
         )}
 
-        {/* Step 4: Sincronizar - ejecución automática, solo muestra progreso */}
+        {/* Step 4: Sincronizar - ejecución automática con opción de cancelar */}
         {currentStep === 4 && (
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm font-medium flex items-center gap-2" style={{ color: `rgb(${r}, ${g}, ${b})` }}>
               <RefreshCw className="w-4 h-4 animate-spin" />
-              Sincronizando registros...
+              {isCancelling ? "Cancelando sincronización..." : "Sincronizando registros..."}
             </span>
             <div className="flex-1" />
             <span className="text-xs text-muted-foreground">
-              Procesando {selectedCount} registros seleccionados
+              {isCancelling
+                ? "Finalizando lote actual..."
+                : `Procesando ${selectedCount} registros seleccionados`
+              }
             </span>
           </div>
         )}
