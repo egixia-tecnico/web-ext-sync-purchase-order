@@ -3,8 +3,8 @@
  * Design: "Operational Clarity" - barra superior con color primario configurable
  * Incluye indicador de estado de conexión y menú desplegable
  * 
- * Acceso abierto: historial y logs son accesibles directamente sin login.
- * Solo "Gestión de Clientes" requiere sesión @egixia.com.
+ * Acceso abierto: historial es accesible directamente sin login.
+ * "Gestión de Clientes" y "Log de Integraciones" requieren sesión @egixia.com.
  */
 import { useThemeColor } from "@/contexts/ThemeColorContext";
 import { useOCSync } from "@/contexts/OCSyncContext";
@@ -131,18 +131,27 @@ export default function AppHeader({ onHistoryClick, onLogsClick }: AppHeaderProp
                 Historial de Verificaciones
               </DropdownMenuItem>
 
-              {/* Log de Integraciones - acceso libre */}
+              <DropdownMenuSeparator />
+
+              {/* Log de Integraciones - requiere @egixia.com */}
               {onLogsClick && (
                 <DropdownMenuItem
-                  onClick={onLogsClick}
+                  onClick={() => {
+                    if (isAdmin) {
+                      onLogsClick();
+                    } else {
+                      navigate(`/admin/login?returnPath=${encodeURIComponent("/logs")}`);
+                    }
+                  }}
                   className="cursor-pointer"
                 >
                   <FileText className="w-4 h-4 mr-2" />
                   Log de Integraciones
+                  {!isAdmin && (
+                    <span className="ml-auto text-[9px] text-amber-500 font-medium">Admin</span>
+                  )}
                 </DropdownMenuItem>
               )}
-
-              <DropdownMenuSeparator />
 
               {/* Gestión de Clientes - requiere @egixia.com */}
               <DropdownMenuItem

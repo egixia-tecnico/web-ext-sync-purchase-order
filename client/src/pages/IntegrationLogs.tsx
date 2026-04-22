@@ -4,7 +4,7 @@
  * raw response, HTTP status code, tiempo de ejecución, servicio, error detail
  * Con filtros por estado, paginación y detalle expandible
  */
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { useClientKey } from "@/contexts/ClientKeyContext";
 import { useThemeColor } from "@/contexts/ThemeColorContext";
@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 
 const PAGE_SIZE = 25;
 
@@ -23,6 +23,32 @@ export default function IntegrationLogs() {
   const { clientKey } = useClientKey();
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
+  const [, navigate] = useLocation();
+
+  // Verificar sesión admin
+  const { data: adminSession, isLoading: adminLoading } = trpc.auth.checkAdminSession.useQuery(undefined, {
+    retry: false,
+    staleTime: 30_000,
+  });
+
+  // Redirigir a login si no es admin
+  useEffect(() => {
+    if (!adminLoading && adminSession?.isAdmin !== true) {
+      navigate(`/admin/login?returnPath=${encodeURIComponent("/logs?clientKey=" + (clientKey || ""))}`);
+    }
+  }, [adminLoading, adminSession, navigate, clientKey]);
+
+  // Mostrar loading mientras verifica sesión
+  if (adminLoading || adminSession?.isAdmin !== true) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Verificando acceso...</p>
+        </div>
+      </div>
+    );
+  }
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [page, setPage] = useState(0);

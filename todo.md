@@ -591,3 +591,9 @@
 - [x] Enlace en menú dropdown del AppHeader → navega a /logs?clientKey=xxx
 - [x] Paginación completa (20 por página) con retención de 20 por estado por cliente
 - [x] 24 tests pasando, TypeScript sin errores
+
+## Restricción de Acceso: Log de Integraciones solo Admin
+
+- [x] Enlace "Log de Integraciones" en menú muestra badge "Admin" y redirige a login si no es admin
+- [x] Página /logs protegida con checkAdminSession: redirige a /admin/login si no es admin
+- [x] Redirige a /admin/login con returnPath=/logs?clientKey=xxx para volver tras autenticarse
