@@ -603,3 +603,12 @@
 - [x] Corregir early return antes de hooks en IntegrationLogs.tsx
 - [x] Mover todos los hooks al inicio del componente antes de cualquier return condicional
 - [x] Verificar TypeScript y tests pasando (24/24 tests, 0 errores TS)
+
+## Eliminar reintentos en llamadas API de Egixia
+
+- [x] Eliminar reintentos en getToken (era 4 intentos con 5s de espera, ahora 1 solo intento)
+- [x] Eliminar reintentos/contador de fallos consecutivos en callEgixiaApi (eliminado endpointFailureCount y MAX_CONSECUTIVE_FAILURES)
+- [x] Si falla al primer intento, reportar error inmediatamente sin reintentar
+- [x] Se mantiene: renovación de token en 401 (caso legítimo de token expirado, no es un reintento)
+- [x] Se mantiene: CommunicationFailureDialog para COMMUNICATION_FAILURE_TOKEN (ahora se muestra al primer fallo)
+- [x] Verificar TypeScript y tests pasando (24/24 tests, 0 errores TS)
