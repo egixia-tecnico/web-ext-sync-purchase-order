@@ -225,31 +225,43 @@ export async function markMagicLinkAsUsed(token: string) {
 
 export async function saveIntegrationLog(data: {
   clientId: number;
+  httpMethod?: string;
   url: string;
+  requestHeaders?: string;
   requestBody?: string;
+  httpStatusCode?: number;
   responseBody?: string;
+  rawResponse?: string;
   token?: string;
   authPrefix?: string;
   status: string;
   errorDetail?: string;
+  serviceName?: string;
+  executionTimeMs?: number;
 }) {
   const db = await getDb();
   if (!db) return false;
 
   try {
-    // Insert new log
+    // Insert new log with raw backend data
     await db.insert(integrationLogs).values({
       clientId: data.clientId,
+      httpMethod: data.httpMethod || "GET",
       url: data.url,
+      requestHeaders: data.requestHeaders || null,
       requestBody: data.requestBody || null,
+      httpStatusCode: data.httpStatusCode ?? null,
       responseBody: data.responseBody || null,
+      rawResponse: data.rawResponse ? data.rawResponse.substring(0, 5000) : null, // Truncate to 5000 chars
       token: data.token ? data.token.substring(0, 10) + "..." : null, // Partial token
       authPrefix: data.authPrefix || "Bearer",
       status: data.status,
       errorDetail: data.errorDetail || null,
+      serviceName: data.serviceName || extractServiceName(data.url),
+      executionTimeMs: data.executionTimeMs ?? null,
     });
 
-    // Clean old logs - keep only last 10 per integration type (30 total max)
+    // Clean old logs - keep last 20 per status (success/error/timeout) = 60 max
     await cleanOldIntegrationLogs(data.clientId);
     
     return true;
@@ -259,18 +271,38 @@ export async function saveIntegrationLog(data: {
   }
 }
 
-export async function getIntegrationLogs(clientId: number) {
+export async function getIntegrationLogs(clientId: number, options?: { limit?: number; offset?: number; status?: string }) {
   const db = await getDb();
-  if (!db) return [];
+  if (!db) return { logs: [], total: 0 };
 
-  const result = await db
+  const limit = options?.limit || 50;
+  const offset = options?.offset || 0;
+
+  // Build where conditions
+  const conditions = [eq(integrationLogs.clientId, clientId)];
+  if (options?.status && options.status !== "all") {
+    conditions.push(eq(integrationLogs.status, options.status));
+  }
+
+  const whereClause = conditions.length === 1 ? conditions[0] : and(...conditions);
+
+  // Get total count
+  const countResult = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(integrationLogs)
+    .where(whereClause!);
+  const total = countResult[0]?.count || 0;
+
+  // Get paginated results
+  const logs = await db
     .select()
     .from(integrationLogs)
-    .where(eq(integrationLogs.clientId, clientId))
+    .where(whereClause!)
     .orderBy(desc(integrationLogs.createdAt))
-    .limit(20);
+    .limit(limit)
+    .offset(offset);
 
-  return result;
+  return { logs, total };
 }
 
 export async function deleteIntegrationLogsByClientKey(clientKey: string) {
@@ -334,7 +366,7 @@ async function cleanOldIntegrationLogs(clientId: number) {
   }
 }
 
-function extractServiceName(url: string): string {
+export function extractServiceName(url: string): string {
   // Extract service name from URL
   // Examples:
   // /apimanager/purchase_order_v1/list -> purchase_order_v1_list

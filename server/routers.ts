@@ -2,7 +2,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { saveVerificationLog, getVerificationHistory, getClients, getClientById, getClientByKey, getActiveClient, createClient, updateClient, deleteClient, setActiveClient, createMagicLink, getMagicLinkByToken, markMagicLinkAsUsed, getIntegrationLogs, saveIntegrationLog, deleteIntegrationLogsByClientKey } from "./db";
+import { saveVerificationLog, getVerificationHistory, getClients, getClientById, getClientByKey, getActiveClient, createClient, updateClient, deleteClient, setActiveClient, createMagicLink, getMagicLinkByToken, markMagicLinkAsUsed, getIntegrationLogs, saveIntegrationLog, deleteIntegrationLogsByClientKey, extractServiceName } from "./db";
 import { sendMagicLinkEmail, isSendGridConfigured } from "./email";
 import axios from "axios";
 import { AXIOS_TIMEOUT_MS } from "@shared/const";
@@ -192,9 +192,20 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
 
   console.log(`[Egixia] Calling ${method} ${url}`);
 
+  // Raw data tracking for logs
   let responseData: any;
   let status = "success";
   let errorDetail: string | undefined;
+  let httpStatusCode: number | undefined;
+  let rawResponseBody: string | undefined;
+  const startTime = Date.now();
+
+  // Headers sent (mask token for security)
+  const requestHeaders = {
+    Authorization: `Bearer ${token.substring(0, 10)}...`,
+    "Content-Type": "application/json",
+    "User-Agent": "PostmanRuntime/7.51.1"
+  };
 
   // Normalize endpoint key for failure tracking (strip query params)
   const endpointKey = endpoint.split('?')[0];
@@ -210,34 +221,35 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
       },
       data: body,
       timeout: 70000,
-      // Recibir respuesta como texto para poder detectar HTML antes de parsear
       responseType: "text",
-      transformResponse: [(rawData: string) => rawData], // Evitar auto-parse de axios
+      transformResponse: [(rawData: string) => rawData],
     });
+
+    httpStatusCode = response.status;
+    const rawBody: string = typeof response.data === 'string' ? response.data : String(response.data ?? '');
+    rawResponseBody = rawBody;
+    const contentType = (response.headers['content-type'] || '') as string;
 
     if (response.status !== 200) {
       console.error(`[Egixia] API HTTP error ${response.status}:`, response.statusText);
       status = "error";
+      errorDetail = `HTTP ${response.status}: ${response.statusText}`;
       responseData = { error: response.statusText, status: response.status };
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    const rawBody: string = typeof response.data === 'string' ? response.data : String(response.data ?? '');
-    const contentType = (response.headers['content-type'] || '') as string;
-
-    // Detect HTML response (server returned error page instead of JSON)
+    // Detect HTML response
     if (
       contentType.includes('text/html') ||
       rawBody.trimStart().startsWith('<')
     ) {
       console.error(`[Egixia] Server returned HTML instead of JSON for ${url}. Content-Type: ${contentType}`);
       status = "error";
-      errorDetail = `El servidor devolvió HTML en vez de JSON. Posible URL base incorrecta o sesión expirada. URL: ${url}`;
-      responseData = { error: "HTML_RESPONSE", url, contentType, preview: rawBody.substring(0, 200) };
+      errorDetail = `El servidor devolvió HTML en vez de JSON. URL: ${url}`;
+      responseData = { error: "HTML_RESPONSE", url, contentType, preview: rawBody.substring(0, 300) };
       throw new Error(
         `El servidor devolvió una página HTML en vez de JSON. ` +
-        `Verifique que la URL base del cliente sea correcta y que el servicio esté disponible. ` +
-        `URL: ${url}`
+        `Verifique que la URL base del cliente sea correcta y que el servicio esté disponible. URL: ${url}`
       );
     }
 
@@ -248,8 +260,8 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
     } catch (parseErr: any) {
       console.error(`[Egixia] Failed to parse JSON response from ${url}:`, parseErr.message);
       status = "error";
-      errorDetail = `Respuesta no es JSON válido. Primeros 200 caracteres: ${rawBody.substring(0, 200)}`;
-      responseData = { error: "INVALID_JSON", preview: rawBody.substring(0, 200) };
+      errorDetail = `Respuesta no es JSON válido. Primeros 300 chars: ${rawBody.substring(0, 300)}`;
+      responseData = { error: "INVALID_JSON", preview: rawBody.substring(0, 300) };
       throw new Error(`La respuesta del servidor no es JSON válido. URL: ${url}. Detalle: ${parseErr.message}`);
     }
 
@@ -258,18 +270,24 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
     responseData = parsedData;
     return parsedData;
   } catch (err: any) {
-    const httpStatus = err.response?.status;
+    const errHttpStatus = err.response?.status;
+    if (!httpStatusCode && errHttpStatus) httpStatusCode = errHttpStatus;
 
-    // Detect HTML in error response body (axios error with HTML body)
+    // Capture raw response from error if not already captured
     const errResponseData = err.response?.data;
+    if (!rawResponseBody && typeof errResponseData === 'string') {
+      rawResponseBody = errResponseData;
+    }
+
+    // Detect HTML in error response body
     if (
       typeof errResponseData === 'string' &&
       errResponseData.trimStart().startsWith('<') &&
-      !errorDetail // Only if not already set
+      !errorDetail
     ) {
       status = "error";
-      errorDetail = `El servidor devolvió HTML en vez de JSON (capturado en error). Posible URL base incorrecta. URL: ${url}. Preview: ${errResponseData.substring(0, 200)}`;
-      responseData = { error: "HTML_RESPONSE_IN_ERROR", url, preview: errResponseData.substring(0, 200) };
+      errorDetail = `El servidor devolvió HTML en vez de JSON. HTTP ${httpStatusCode || '?'}. URL: ${url}. Preview: ${errResponseData.substring(0, 300)}`;
+      responseData = { error: "HTML_RESPONSE_IN_ERROR", url, httpStatus: httpStatusCode, preview: errResponseData.substring(0, 300) };
       throw new Error(
         `El servidor devolvió una página HTML en vez de JSON. ` +
         `Verifique que la URL base del cliente sea correcta. URL: ${url}`
@@ -277,21 +295,21 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
     }
     
     // Handle 401 Unauthorized - token expired, retry once with new token
-    if (httpStatus === 401 && retryOn401) {
+    if (errHttpStatus === 401 && retryOn401) {
       console.log(`[Egixia] 401 Unauthorized, refreshing token and retrying...`);
-      cachedToken = null; // Clear cached token
+      cachedToken = null;
       tokenExpiry = 0;
       token = await getToken(baseUrl, userName, password, clientId, clientSecret);
-      return await callEgixiaApi(endpoint, method, body, clientKey, false); // Retry once without further 401 retries
+      return await callEgixiaApi(endpoint, method, body, clientKey, false);
     }
     
-    // Handle 403 Forbidden - insufficient permissions
-    if (httpStatus === 403) {
-      const serviceName = endpoint.split('/').pop() || endpoint;
+    // Handle 403 Forbidden
+    if (errHttpStatus === 403) {
+      const svcName = endpoint.split('/').pop() || endpoint;
       status = "error";
-      errorDetail = `HTTP 403: Sin permisos para ejecutar el servicio ${serviceName}`;
+      errorDetail = `HTTP 403: Sin permisos para ejecutar el servicio ${svcName}`;
       responseData = { error: "Forbidden", status: 403 };
-      throw new Error(`Hacen falta permisos para ejecutar el servicio ${serviceName}`);
+      throw new Error(`Hacen falta permisos para ejecutar el servicio ${svcName}`);
     }
     
     // Track consecutive failures per endpoint
@@ -301,34 +319,41 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
     
     if (failCount >= MAX_CONSECUTIVE_FAILURES) {
       console.error(`[Egixia] ${MAX_CONSECUTIVE_FAILURES} consecutive failures on ${endpointKey}, triggering communication failure alert`);
-      endpointFailureCount[endpointKey] = 0; // Reset counter after alert
+      endpointFailureCount[endpointKey] = 0;
       status = "error";
-      responseData = { error: err.message, code: err.code, status: httpStatus };
+      errorDetail = `${MAX_CONSECUTIVE_FAILURES} fallos consecutivos en ${endpointKey}. Último error: ${err.message}`;
+      responseData = { error: err.message, code: err.code, status: errHttpStatus };
       throw new Error("COMMUNICATION_FAILURE_SERVICE");
     }
 
     status = err.code === 'ECONNABORTED' ? "timeout" : "error";
-    errorDetail = err.code === 'ECONNABORTED'
+    errorDetail = errorDetail || (err.code === 'ECONNABORTED'
       ? `Timeout: La petición tardó más de 70 segundos. Endpoint: ${endpoint}`
-      : `${err.message}${httpStatus ? ` (HTTP ${httpStatus})` : ''}${err.code ? ` [${err.code}]` : ''}`;
-    responseData = { error: err.message, code: err.code, status: httpStatus };
+      : `${err.message}${errHttpStatus ? ` (HTTP ${errHttpStatus})` : ''}${err.code ? ` [${err.code}]` : ''}`);
+    responseData = responseData || { error: err.message, code: err.code, status: errHttpStatus };
     throw new Error(`Error en llamada a API: ${err.message}`);
   } finally {
-    // Save integration log (exclude gettoken endpoint)
-    if (!endpoint.includes("/gettoken")) {
-      const client = await getClientByKey(clientKey || "");
-      if (client) {
-        await saveIntegrationLog({
-          clientId: client.id,
-          url,
-          requestBody: body ? JSON.stringify(body) : undefined,
-          responseBody: responseData ? JSON.stringify(responseData) : undefined,
-          token,
-          authPrefix: "Bearer",
-          status,
-          errorDetail,
-        });
-      }
+    const executionTimeMs = Date.now() - startTime;
+
+    // Save integration log for ALL endpoints (including gettoken)
+    const client = await getClientByKey(clientKey || "");
+    if (client) {
+      await saveIntegrationLog({
+        clientId: client.id,
+        httpMethod: method,
+        url,
+        requestHeaders: JSON.stringify(requestHeaders),
+        requestBody: body ? JSON.stringify(body) : (method === "GET" ? endpoint.split('?')[1] || undefined : undefined),
+        httpStatusCode: httpStatusCode ?? undefined,
+        responseBody: responseData ? JSON.stringify(responseData) : undefined,
+        rawResponse: rawResponseBody || undefined,
+        token,
+        authPrefix: "Bearer",
+        status,
+        errorDetail,
+        serviceName: extractServiceName(url),
+        executionTimeMs,
+      });
     }
   }
 }
@@ -1155,13 +1180,28 @@ export const appRouter = router({
 
   logs: router({
     getIntegrationLogs: publicProcedure
-      .input(z.object({ clientKey: z.string() }))
+      .input(z.object({
+        clientKey: z.string(),
+        limit: z.number().optional().default(50),
+        offset: z.number().optional().default(0),
+        status: z.string().optional().default("all"),
+      }))
       .query(async ({ input }) => {
         const client = await getClientByKey(input.clientKey);
         if (!client) {
           throw new Error("Cliente no encontrado");
         }
-        return await getIntegrationLogs(client.id);
+        return await getIntegrationLogs(client.id, {
+          limit: input.limit,
+          offset: input.offset,
+          status: input.status,
+        });
+      }),
+
+    clearLogs: publicProcedure
+      .input(z.object({ clientKey: z.string() }))
+      .mutation(async ({ input }) => {
+        return await deleteIntegrationLogsByClientKey(input.clientKey);
       }),
   }),
 });

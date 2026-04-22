@@ -10,6 +10,7 @@ import Home from "./pages/Home";
 import ClientsManagement from "./pages/ClientsManagement";
 import AdminLogin from "./pages/AdminLogin";
 import MagicLinkCallback from "./pages/MagicLinkCallback";
+import IntegrationLogs from "./pages/IntegrationLogs";
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
@@ -18,6 +19,7 @@ function Router() {
       <Route path={"/clients"} component={ClientsManagement} />
       <Route path={"/admin/login"} component={AdminLogin} />
       <Route path={"/admin/callback"} component={MagicLinkCallback} />
+      <Route path={"/logs"} component={IntegrationLogs} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>

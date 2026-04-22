@@ -579,3 +579,15 @@
 - [x] Texto "Cancelando... finalizando lote actual" durante la cancelación
 - [x] Permitir continuar flujo normal con las OC ya procesadas
 - [x] 24 tests pasando, TypeScript sin errores
+
+## Página Completa de Logs de API (Admin)
+
+- [x] Mejorar schema integration_logs: campos httpMethod, httpStatusCode, requestHeaders, rawResponse, executionTimeMs, serviceName
+- [x] Capturar datos crudos en callEgixiaApi: URL completa, método HTTP, headers (token enmascarado), body crudo, response crudo, status HTTP, tiempo de ejecución
+- [x] Incluir llamadas a getToken en los logs (con serviceName='getToken')
+- [x] Endpoint tRPC getIntegrationLogs con paginación (page/pageSize), filtros por status y búsqueda por URL/servicio
+- [x] Página IntegrationLogs.tsx con tabla completa, filtros por estado, detalle expandible con request/response crudos, badges de color por status
+- [x] Ruta /logs en App.tsx (acceso abierto, recibe clientKey por query param)
+- [x] Enlace en menú dropdown del AppHeader → navega a /logs?clientKey=xxx
+- [x] Paginación completa (20 por página) con retención de 20 por estado por cliente
+- [x] 24 tests pasando, TypeScript sin errores

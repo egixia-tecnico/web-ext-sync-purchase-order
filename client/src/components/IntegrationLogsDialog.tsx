@@ -72,15 +72,15 @@ export default function IntegrationLogsDialog({ open, onOpenChange }: Integratio
           </div>
         )}
 
-        {!isLoading && (!logs || logs.length === 0) && (
+        {!isLoading && (!logs || logs.logs.length === 0) && (
           <div className="text-center py-12 text-muted-foreground">
             No hay logs de integraciones disponibles
           </div>
         )}
 
-        {!isLoading && logs && logs.length > 0 && (
+        {!isLoading && logs && logs.logs.length > 0 && (
           <div className="space-y-3">
-            {logs.map((log) => (
+            {logs.logs.map((log) => (
               <div key={log.id} className="border rounded-lg p-4 space-y-3">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 space-y-2">
