@@ -597,3 +597,9 @@
 - [x] Enlace "Log de Integraciones" en menú muestra badge "Admin" y redirige a login si no es admin
 - [x] Página /logs protegida con checkAdminSession: redirige a /admin/login si no es admin
 - [x] Redirige a /admin/login con returnPath=/logs?clientKey=xxx para volver tras autenticarse
+
+## Bug: "Rendered more hooks than during the previous render" en IntegrationLogs.tsx
+
+- [x] Corregir early return antes de hooks en IntegrationLogs.tsx
+- [x] Mover todos los hooks al inicio del componente antes de cualquier return condicional
+- [x] Verificar TypeScript y tests pasando (24/24 tests, 0 errores TS)

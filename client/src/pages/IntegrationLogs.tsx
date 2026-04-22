@@ -20,10 +20,16 @@ import { Link, useLocation } from "wouter";
 const PAGE_SIZE = 25;
 
 export default function IntegrationLogs() {
+  // ─── ALL HOOKS MUST BE DECLARED BEFORE ANY CONDITIONAL RETURN ───
   const { clientKey } = useClientKey();
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
   const [, navigate] = useLocation();
+
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [page, setPage] = useState(0);
+  const [expandedRow, setExpandedRow] = useState<number | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
 
   // Verificar sesión admin
   const { data: adminSession, isLoading: adminLoading } = trpc.auth.checkAdminSession.useQuery(undefined, {
@@ -31,30 +37,8 @@ export default function IntegrationLogs() {
     staleTime: 30_000,
   });
 
-  // Redirigir a login si no es admin
-  useEffect(() => {
-    if (!adminLoading && adminSession?.isAdmin !== true) {
-      navigate(`/admin/login?returnPath=${encodeURIComponent("/logs?clientKey=" + (clientKey || ""))}`);
-    }
-  }, [adminLoading, adminSession, navigate, clientKey]);
-
-  // Mostrar loading mientras verifica sesión
-  if (adminLoading || adminSession?.isAdmin !== true) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Verificando acceso...</p>
-        </div>
-      </div>
-    );
-  }
-
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [page, setPage] = useState(0);
-  const [expandedRow, setExpandedRow] = useState<number | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-
+  // Query de logs (se ejecuta solo si es admin y hay clientKey)
+  const isAdmin = adminSession?.isAdmin === true;
   const { data, isLoading, refetch } = trpc.logs.getIntegrationLogs.useQuery(
     {
       clientKey: clientKey || "",
@@ -62,7 +46,7 @@ export default function IntegrationLogs() {
       offset: page * PAGE_SIZE,
       status: statusFilter,
     },
-    { enabled: !!clientKey, refetchOnWindowFocus: false }
+    { enabled: !!clientKey && isAdmin, refetchOnWindowFocus: false }
   );
 
   const clearLogsMutation = trpc.logs.clearLogs.useMutation({
@@ -92,6 +76,29 @@ export default function IntegrationLogs() {
         log.responseBody?.toLowerCase().includes(term)
     );
   }, [logs, searchTerm]);
+
+  // Redirigir a login si no es admin (después de todos los hooks)
+  useEffect(() => {
+    if (!adminLoading && !isAdmin) {
+      navigate(`/admin/login?returnPath=${encodeURIComponent("/logs?clientKey=" + (clientKey || ""))}`);
+    }
+  }, [adminLoading, isAdmin, navigate, clientKey]);
+
+  // ─── CONDITIONAL RETURNS (after all hooks) ───
+
+  // Mostrar loading mientras verifica sesión
+  if (adminLoading || !isAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Verificando acceso...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── HELPER FUNCTIONS ───
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -261,7 +268,7 @@ export default function IntegrationLogs() {
 
                   {/* Method + HTTP Status */}
                   <div className="flex items-center gap-2 w-24 shrink-0">
-                    {getMethodBadge(log.httpMethod)}
+                    {getMethodBadge(log.httpMethod || "?")}
                     {getHttpStatusBadge(log.httpStatusCode)}
                   </div>
 
