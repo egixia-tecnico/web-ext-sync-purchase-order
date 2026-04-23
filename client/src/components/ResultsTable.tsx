@@ -364,12 +364,22 @@ export default function ResultsTable() {
                       {record.statusMessage ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="text-xs text-muted-foreground truncate max-w-[250px] block cursor-help">
-                              {record.statusMessage}
+                            <span className="text-xs text-muted-foreground truncate max-w-[300px] block cursor-help">
+                              {record.statusMessage.match(/^\[HTTP \d+\]/) ? (
+                                <>
+                                  <span className="font-semibold text-red-600">
+                                    {record.statusMessage.match(/^\[HTTP \d+\]/)?.[0]}
+                                  </span>
+                                  {' '}
+                                  {record.statusMessage.replace(/^\[HTTP \d+\]\s*/, '')}
+                                </>
+                              ) : (
+                                record.statusMessage
+                              )}
                             </span>
                           </TooltipTrigger>
-                          <TooltipContent side="left" className="max-w-sm">
-                            <p className="text-xs">{record.statusMessage}</p>
+                          <TooltipContent side="left" className="max-w-md">
+                            <p className="text-xs whitespace-pre-wrap">{record.statusMessage}</p>
                           </TooltipContent>
                         </Tooltip>
                       ) : (

@@ -330,8 +330,11 @@ export function useOCVerification() {
           const syncResult = result.results[i];
 
           if (syncResult && !syncResult.success) {
+            // Build error message with HTTP status code and API message
+            const httpCode = syncResult.httpStatus ? `[HTTP ${syncResult.httpStatus}] ` : '';
+            const apiMsg = syncResult.errorMessage || syncResult.error || "Error al sincronizar";
             updateRecord(record.id, {
-              statusMessage: syncResult.errorMessage || syncResult.error || "Error al sincronizar",
+              statusMessage: `${httpCode}${apiMsg}`,
             });
           } else if (syncResult?.success) {
             allSuccessfulOrders.push(record);

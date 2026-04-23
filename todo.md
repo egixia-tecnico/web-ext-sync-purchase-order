@@ -612,3 +612,9 @@
 - [x] Se mantiene: renovación de token en 401 (caso legítimo de token expirado, no es un reintento)
 - [x] Se mantiene: CommunicationFailureDialog para COMMUNICATION_FAILURE_TOKEN (ahora se muestra al primer fallo)
 - [x] Verificar TypeScript y tests pasando (24/24 tests, 0 errores TS)
+
+## Mostrar mensaje y código de error exacto de la API en sincronización fallida
+
+- [x] Backend: propagar mensaje real de la API y código HTTP en respuesta de sincronización
+- [x] Frontend: mostrar mensaje de error de la API y código HTTP al usuario en la tabla de resultados ([HTTP xxx] en rojo + mensaje)
+- [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)

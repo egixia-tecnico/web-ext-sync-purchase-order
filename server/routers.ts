@@ -295,7 +295,27 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
       ? `Timeout: La petición tardó más de 70 segundos. Endpoint: ${endpoint}`
       : `${err.message}${errHttpStatus ? ` (HTTP ${errHttpStatus})` : ''}${err.code ? ` [${err.code}]` : ''}`);
     responseData = responseData || { error: err.message, code: err.code, status: errHttpStatus };
-    throw new Error(`Error en llamada a API: ${err.message}`);
+
+    // Extract the real API message from the error response body
+    let apiMessage = err.message;
+    if (errResponseData) {
+      if (typeof errResponseData === 'string') {
+        try {
+          const parsed = JSON.parse(errResponseData);
+          apiMessage = parsed.message || parsed.Message || parsed.error || parsed.Error || errResponseData;
+        } catch {
+          apiMessage = errResponseData.substring(0, 500);
+        }
+      } else if (typeof errResponseData === 'object') {
+        apiMessage = errResponseData.message || errResponseData.Message || errResponseData.error || errResponseData.Error || JSON.stringify(errResponseData);
+      }
+    }
+
+    // Create enriched error with httpStatus and apiMessage
+    const enrichedError: any = new Error(apiMessage);
+    enrichedError.httpStatus = errHttpStatus || httpStatusCode;
+    enrichedError.apiMessage = apiMessage;
+    throw enrichedError;
   } finally {
     const executionTimeMs = Date.now() - startTime;
 
@@ -729,6 +749,8 @@ export const appRouter = router({
           return {
             success: false,
             error: error.message,
+            errorMessage: error.apiMessage || error.message,
+            httpStatus: error.httpStatus || null,
             data: null,
           };
         }
@@ -759,6 +781,7 @@ export const appRouter = router({
           message?: string | null;
           errorMessage?: string | null;
           error?: string | null;
+          httpStatus?: number | null;
           data?: any;
         }> = [];
 
@@ -834,6 +857,8 @@ export const appRouter = router({
                 buyerExternalCode: order.buyerExternalCode,
                 success: false,
                 error: error.message,
+                errorMessage: error.apiMessage || error.message,
+                httpStatus: error.httpStatus || null,
                 data: null,
               });
             }
