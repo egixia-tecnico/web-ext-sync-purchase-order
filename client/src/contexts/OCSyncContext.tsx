@@ -2,7 +2,7 @@
  * OCSyncContext - Store principal para la Mini App de verificación de OC
  * 
  * Centraliza el currentStep para controlar la visibilidad de componentes por etapa.
- * Steps: 1=Cargar, 2=Verificar, 3=Resultados, 4=Sincronizar, 5=Exportar
+ * Steps: 1=Cargar, 2=Verificar Proveedores, 3=Verificar OCs, 4=Resultados, 5=Sincronizar, 6=Finalizado
  */
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
 
@@ -21,6 +21,10 @@ export interface OCRecord {
   canceled?: string;
   updated?: string;
   synchronization_date?: string;
+  /** Result of supplier pre-check (step 2): true=exists, false=not exists, undefined=not checked */
+  supplierExists?: boolean;
+  /** Error message from supplier pre-check if any */
+  supplierCheckError?: string;
   status?: "pending" | "checking" | "synced" | "not_found" | "supplier_not_exists" | "error" | "synced_with_error";
   statusMessage?: string;
   provider_exists?: boolean;
@@ -48,9 +52,28 @@ export interface KPIData {
   checking: number;
 }
 
+/** Summary of supplier pre-check results (step 2) */
+export interface SupplierCheckSummary {
+  total: number;
+  exists: number;
+  notExists: number;
+  errors: number;
+  /** Whether the check has been completed */
+  completed: boolean;
+}
+
 export type ConnectionStatus = "idle" | "connecting" | "connected" | "error" | "disconnected";
 
-export type WorkflowStep = 1 | 2 | 3 | 4 | 5;
+/**
+ * Wizard steps:
+ * 1 = Cargar datos
+ * 2 = Verificar Proveedores (nuevo paso 1a)
+ * 3 = Verificar OCs
+ * 4 = Resultados
+ * 5 = Sincronizar
+ * 6 = Finalizado
+ */
+export type WorkflowStep = 1 | 2 | 3 | 4 | 5 | 6;
 
 interface OCSyncContextType {
   records: OCRecord[];
@@ -74,6 +97,8 @@ interface OCSyncContextType {
   selectMultipleStatuses: (statuses: OCRecord["status"][]) => void;
   /** Select all records that are NOT "synced" status */
   selectNonSynced: () => void;
+  /** Select only records whose supplier was verified as existing */
+  selectVerifiedSuppliers: () => void;
   // Step management
   currentStep: WorkflowStep;
   setCurrentStep: (step: WorkflowStep) => void;
@@ -82,6 +107,9 @@ interface OCSyncContextType {
   // KPI filter for results step
   activeKPIFilter: string | null;
   setActiveKPIFilter: (filter: string | null) => void;
+  // Supplier check summary (step 2)
+  supplierCheckSummary: SupplierCheckSummary;
+  setSupplierCheckSummary: (summary: SupplierCheckSummary) => void;
 }
 
 const OCSyncContext = createContext<OCSyncContextType | null>(null);
@@ -95,11 +123,20 @@ export function OCSyncProvider({ children }: { children: ReactNode }) {
   const [selectedRecords, setSelectedRecords] = useState<Set<string>>(new Set());
   const [currentStep, setCurrentStep] = useState<WorkflowStep>(1);
   const [activeKPIFilter, setActiveKPIFilter] = useState<string | null>(null);
+  const [supplierCheckSummary, setSupplierCheckSummary] = useState<SupplierCheckSummary>({
+    total: 0,
+    exists: 0,
+    notExists: 0,
+    errors: 0,
+    completed: false,
+  });
 
-  /** Al cargar datos, todos los registros quedan seleccionados y se avanza al step 2 */
+  /** Al cargar datos, todos los registros quedan seleccionados y se avanza al step 2 (verificar proveedores) */
   const setRecords = useCallback((newRecords: OCRecord[]) => {
     setRecordsState(newRecords);
     setSelectedRecords(new Set(newRecords.map(r => r.id)));
+    // Reset supplier check summary when new records are loaded
+    setSupplierCheckSummary({ total: 0, exists: 0, notExists: 0, errors: 0, completed: false });
     if (newRecords.length > 0) {
       setCurrentStep(2);
     }
@@ -162,8 +199,15 @@ export function OCSyncProvider({ children }: { children: ReactNode }) {
     ));
   }, [records]);
 
+  /** Select only records whose supplier was verified as existing (supplierExists === true) */
+  const selectVerifiedSuppliers = useCallback(() => {
+    setSelectedRecords(new Set(
+      records.filter(r => r.supplierExists === true).map(r => r.id)
+    ));
+  }, [records]);
+
   const goToNextStep = useCallback(() => {
-    setCurrentStep(prev => Math.min(prev + 1, 5) as WorkflowStep);
+    setCurrentStep(prev => Math.min(prev + 1, 6) as WorkflowStep);
   }, []);
 
   const goToPrevStep = useCallback(() => {
@@ -177,9 +221,10 @@ export function OCSyncProvider({ children }: { children: ReactNode }) {
       progress, setProgress,
       connectionStatus, setConnectionStatus,
       connectionError, setConnectionError,
-      selectedRecords, toggleSelection, selectAll, deselectAll, selectByStatus, selectMultipleStatuses, selectNonSynced,
+      selectedRecords, toggleSelection, selectAll, deselectAll, selectByStatus, selectMultipleStatuses, selectNonSynced, selectVerifiedSuppliers,
       currentStep, setCurrentStep, goToNextStep, goToPrevStep,
       activeKPIFilter, setActiveKPIFilter,
+      supplierCheckSummary, setSupplierCheckSummary,
     }}>
       {children}
     </OCSyncContext.Provider>

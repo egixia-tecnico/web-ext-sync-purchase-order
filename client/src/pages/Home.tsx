@@ -16,6 +16,7 @@ import HistoryDialog from "@/components/HistoryDialog";
 // IntegrationLogsDialog ya no se usa aquí - reemplazado por página /logs
 import WorkflowStepper from "@/components/WorkflowStepper";
 import DataUploader from "@/components/DataUploader";
+import SupplierCheckPanel from "@/components/SupplierCheckPanel";
 import KPIDashboard from "@/components/KPIDashboard";
 import ActionBar from "@/components/ActionBar";
 import ResultsTable from "@/components/ResultsTable";
@@ -214,14 +215,17 @@ export default function Home() {
           {/* Step 1: Data uploader */}
           {currentStep === 1 && <DataUploader />}
 
-          {/* Step 3, 4, 5: KPI Dashboard */}
-          {currentStep >= 3 && <KPIDashboard />}
+          {/* Step 2: Supplier check panel (automatic verification) */}
+          {currentStep === 2 && <SupplierCheckPanel />}
 
-          {/* Step 2, 3, 4: Action bar (controls differ by step) */}
-          {currentStep >= 2 && <ActionBar />}
+          {/* Step 4, 5, 6: KPI Dashboard */}
+          {currentStep >= 4 && <KPIDashboard />}
 
-          {/* Step 2+: Results table (checkboxes hidden in step 5) */}
-          {currentStep >= 2 && <ResultsTable />}
+          {/* Step 3+: Action bar (controls differ by step) */}
+          {currentStep >= 3 && <ActionBar />}
+
+          {/* Step 3+: Results table (checkboxes hidden in step 6) */}
+          {currentStep >= 3 && <ResultsTable />}
         </div>
       </main>
 

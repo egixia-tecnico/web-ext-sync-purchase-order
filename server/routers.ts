@@ -539,6 +539,79 @@ export const appRouter = router({
         };
       }),
 
+    // Verify a batch of unique suppliers (step 1a of wizard)
+    // Frontend sends up to 50 unique providers per call; processes them in parallel
+    verifySuppliersBatch: publicProcedure
+      .input(z.object({
+        suppliers: z.array(z.object({
+          providerExternalCode1: z.string(),
+          providerExternalCode2: z.string().optional(),
+        })),
+        clientKey: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        console.log(`[Egixia] Verifying ${input.suppliers.length} unique suppliers`);
+
+        const results: Array<{
+          providerExternalCode1: string;
+          providerExternalCode2: string;
+          exists: boolean;
+          error?: string;
+        }> = [];
+
+        // Send all suppliers in a single API call (supplier_exists accepts an array)
+        try {
+          const payload = input.suppliers.map(s => ({
+            provider_external_code_1: s.providerExternalCode1,
+            provider_external_code_2: s.providerExternalCode2 || "",
+            provider_external_code_3: "",
+          }));
+
+          const data = await callEgixiaApi(
+            `/ApiManager/suppliers_v3/supplier_exists`,
+            "POST",
+            payload,
+            input.clientKey
+          );
+
+          const outlist = data?.outlist_provider || [];
+
+          for (let i = 0; i < input.suppliers.length; i++) {
+            const supplier = input.suppliers[i];
+            const apiResult = outlist[i];
+            results.push({
+              providerExternalCode1: supplier.providerExternalCode1,
+              providerExternalCode2: supplier.providerExternalCode2 || "",
+              exists: apiResult?.provider_exists === true,
+            });
+          }
+        } catch (error: any) {
+          // On error, mark all suppliers in this batch as error
+          for (const supplier of input.suppliers) {
+            results.push({
+              providerExternalCode1: supplier.providerExternalCode1,
+              providerExternalCode2: supplier.providerExternalCode2 || "",
+              exists: false,
+              error: error.apiMessage || error.message,
+            });
+          }
+        }
+
+        const existsCount = results.filter(r => r.exists).length;
+        const notExistsCount = results.filter(r => !r.exists && !r.error).length;
+        const errorCount = results.filter(r => !!r.error).length;
+
+        return {
+          results,
+          summary: {
+            total: results.length,
+            exists: existsCount,
+            notExists: notExistsCount,
+            errors: errorCount,
+          },
+        };
+      }),
+
     // Verify a small batch of purchase orders (frontend splits into batches)
     // Each call processes a small set of OC to avoid gateway timeout
     verifyPurchaseOrders: publicProcedure
@@ -606,12 +679,28 @@ export const appRouter = router({
                   updated: orderData.updated || null,
                 });
               } else {
-                const supplierResult = await checkSupplierExists(order, input.clientKey);
-                results.push(supplierResult);
+                // OC not found in portal — supplier was already verified in step 2
+                results.push({
+                  purchaseOrderId: order.purchaseOrderId,
+                  providerExternalCode1: order.providerExternalCode1,
+                  providerExternalCode2: order.providerExternalCode2 || "",
+                  buyerCode: order.buyerCode,
+                  status: "not_found",
+                  syncStatus: null,
+                  error: null,
+                });
               }
             } else {
-              const supplierResult = await checkSupplierExists(order, input.clientKey);
-              results.push(supplierResult);
+              // OC not found in portal — supplier was already verified in step 2
+              results.push({
+                purchaseOrderId: order.purchaseOrderId,
+                providerExternalCode1: order.providerExternalCode1,
+                providerExternalCode2: order.providerExternalCode2 || "",
+                buyerCode: order.buyerCode,
+                status: "not_found",
+                syncStatus: null,
+                error: null,
+              });
             }
           } catch (error: any) {
             results.push({

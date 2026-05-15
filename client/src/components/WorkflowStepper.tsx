@@ -1,19 +1,26 @@
 /**
  * WorkflowStepper - Indicador visual del flujo de trabajo
- * Usa currentStep del contexto centralizado.
- * Permite clic en steps completados para navegar hacia atrás.
+ * 
+ * Steps:
+ * 1 = Cargar datos
+ * 2 = Proveedores (verificación automática de proveedores)
+ * 3 = Verificar OCs
+ * 4 = Resultados
+ * 5 = Sincronizar
+ * 6 = Finalizado
  */
 import { motion } from "framer-motion";
 import { useOCSync, type WorkflowStep } from "@/contexts/OCSyncContext";
 import { useThemeColor } from "@/contexts/ThemeColorContext";
-import { Upload, Search, BarChart3, RefreshCw, Download, Check } from "lucide-react";
+import { Upload, Users, Search, BarChart3, RefreshCw, Check } from "lucide-react";
 
 const STEPS = [
-  { id: 1 as WorkflowStep, label: "Cargar datos", icon: Upload },
-  { id: 2 as WorkflowStep, label: "Verificar", icon: Search },
-  { id: 3 as WorkflowStep, label: "Resultados", icon: BarChart3 },
-  { id: 4 as WorkflowStep, label: "Sincronizar", icon: RefreshCw },
-  { id: 5 as WorkflowStep, label: "Finalizado", icon: Check },
+  { id: 1 as WorkflowStep, label: "Cargar", icon: Upload },
+  { id: 2 as WorkflowStep, label: "Proveedores", icon: Users },
+  { id: 3 as WorkflowStep, label: "Verificar", icon: Search },
+  { id: 4 as WorkflowStep, label: "Resultados", icon: BarChart3 },
+  { id: 5 as WorkflowStep, label: "Sincronizar", icon: RefreshCw },
+  { id: 6 as WorkflowStep, label: "Finalizado", icon: Check },
 ];
 
 export default function WorkflowStepper() {
@@ -21,11 +28,9 @@ export default function WorkflowStepper() {
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
 
-  // Determine the highest step the user has reached (to allow going back)
   const maxReachableStep = currentStep;
 
   const handleStepClick = (stepId: WorkflowStep) => {
-    // Only allow clicking on completed steps or current step
     if (stepId <= maxReachableStep && records.length > 0) {
       setCurrentStep(stepId);
     }
@@ -78,12 +83,10 @@ export default function WorkflowStepper() {
               {idx < STEPS.length - 1 && (
                 <div className="flex-1 mx-2 h-0.5 rounded-full bg-border relative overflow-hidden">
                   <motion.div
-                    animate={{
-                      width: isCompleted ? "100%" : isActive ? "50%" : "0%",
-                    }}
-                    transition={{ duration: 0.5 }}
                     className="absolute inset-y-0 left-0 rounded-full"
                     style={{ backgroundColor: `rgb(${r}, ${g}, ${b})` }}
+                    animate={{ width: step.id < currentStep ? "100%" : "0%" }}
+                    transition={{ duration: 0.5, ease: "easeInOut" }}
                   />
                 </div>
               )}

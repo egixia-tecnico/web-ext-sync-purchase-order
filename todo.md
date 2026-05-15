@@ -618,3 +618,14 @@
 - [x] Backend: propagar mensaje real de la API y código HTTP en respuesta de sincronización
 - [x] Frontend: mostrar mensaje de error de la API y código HTTP al usuario en la tabla de resultados ([HTTP xxx] en rojo + mensaje)
 - [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)
+
+## Nuevo paso 2: Verificación de proveedores en lotes (COMPLETADO)
+
+- [x] Backend: procedimiento verifySuppliersBatch (lotes de 50, supplier_exists)
+- [x] Contexto: step 2 (supplier_check), supplierExists/supplierCheckError en OCRecord, supplierCheckSummary global
+- [x] WorkflowStepper: 6 pasos (Cargar > Proveedores > Verificar > Resultados > Sincronizar > Finalizado)
+- [x] Nuevo componente SupplierCheckPanel con KPIs (Existen/No existen/Errores), barra de progreso, Reverificar y Continuar
+- [x] ActionBar: steps renumerados (3=Verificar, 4=Resultados, 5=Sincronizar, 6=Finalizado), filtro de OCs por supplierExists
+- [x] Home.tsx: SupplierCheckPanel en step 2, KPIDashboard desde step 4, ActionBar/ResultsTable desde step 3
+- [x] Eliminado checkSupplierExists de verifyPurchaseOrders (OCs no encontradas → not_found directo)
+- [x] TypeScript: 0 errores | Tests: 24/24 pasando

@@ -1,12 +1,13 @@
 /**
  * ActionBar - Barra de acciones contextual por step
- * Step 2 (Verificar): Botón "Verificar pendientes" → al completar avanza a Step 3
- * Step 3 (Resultados): "Exportar" + "Sincronizar X de Y" → si hay OC ya sincronizadas, pide confirmación
- * Step 4 (Sincronizar): Progreso automático de sincronización REAL → al completar pasa a Step 5
- * Step 5 (Finalizado): Grid actualizado con "Exportar resultados", sin opción de re-sincronizar
  * 
- * CANCELACIÓN: Botón "Cancelar" visible durante verificación (step 2) y sincronización (step 4)
- * Al cancelar: detiene inmediatamente, conserva resultados parciales, muestra resumen
+ * Step 2 (Proveedores): Manejado por SupplierCheckPanel - ActionBar no se muestra
+ * Step 3 (Verificar OCs): Botón "Verificar pendientes" → solo OCs con supplierExists !== false
+ * Step 4 (Resultados): "Exportar" + "Sincronizar X de Y"
+ * Step 5 (Sincronizar): Progreso automático → al completar pasa a Step 6
+ * Step 6 (Finalizado): "Exportar resultados", sin opción de re-sincronizar
+ * 
+ * CANCELACIÓN: Botón "Cancelar" visible durante verificación (step 3) y sincronización (step 5)
  */
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -41,42 +42,48 @@ export default function ActionBar() {
   const { verifyBatch, synchronizeBatch, cancelProcess, isCancelling } = useOCVerification();
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
-  const hasAutoSelectedForStep3 = useRef(false);
+  const hasAutoSelectedForStep4 = useRef(false);
   const syncTriggered = useRef(false);
 
   // State for re-sync confirmation dialog
   const [showResyncConfirm, setShowResyncConfirm] = useState(false);
   const [resyncSyncedCount, setResyncSyncedCount] = useState(0);
 
-  // When entering step 3 (Resultados), auto-select non-synced records
+  // When entering step 4 (Resultados), auto-select non-synced records
   useEffect(() => {
-    if (currentStep === 3 && !hasAutoSelectedForStep3.current) {
+    if (currentStep === 4 && !hasAutoSelectedForStep4.current) {
       selectNonSynced();
-      hasAutoSelectedForStep3.current = true;
+      hasAutoSelectedForStep4.current = true;
     }
-    if (currentStep !== 3) {
-      hasAutoSelectedForStep3.current = false;
+    if (currentStep !== 4) {
+      hasAutoSelectedForStep4.current = false;
     }
   }, [currentStep, selectNonSynced]);
 
-  // When entering step 4 (Sincronizar), auto-execute sync immediately
+  // When entering step 5 (Sincronizar), auto-execute sync immediately
   useEffect(() => {
-    if (currentStep === 4 && !syncTriggered.current && !isProcessing) {
+    if (currentStep === 5 && !syncTriggered.current && !isProcessing) {
       syncTriggered.current = true;
       handleAutoSync();
     }
-    if (currentStep !== 4) {
+    if (currentStep !== 5) {
       syncTriggered.current = false;
     }
   }, [currentStep]);
 
+  // ActionBar only shows from step 3 onwards (step 2 is handled by SupplierCheckPanel)
   if (records.length === 0) return null;
-  if (currentStep < 2) return null;
+  if (currentStep < 3) return null;
 
   const pendingCount = records.filter(r => r.status === "pending" || !r.status).length;
   const selectedCount = selectedRecords.size;
   const totalCount = records.length;
   const progressPercent = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
+
+  // Records eligible for verification: those whose supplier was verified as existing
+  // (supplierExists === true, or undefined if supplier check was not done/errored)
+  const eligibleForVerification = records.filter(r => r.supplierExists !== false);
+  const excludedBySupplier = records.filter(r => r.supplierExists === false).length;
 
   const handleVerify = async () => {
     if (connectionStatus !== "connected") {
@@ -84,20 +91,26 @@ export default function ActionBar() {
       return;
     }
 
-    const toVerify = records.filter(r => selectedRecords.has(r.id));
-    const result = await verifyBatch(toVerify);
+    // Only verify records with verified suppliers (supplierExists !== false)
+    const toVerify = eligibleForVerification.filter(r => selectedRecords.has(r.id));
 
-    // If cancelled, stay on step 2 so user can see partial results and re-verify
-    if (result?.wasCancelled) {
-      // Stay on current step - user can see partial results
+    if (toVerify.length === 0) {
+      toast.warning("No hay registros elegibles para verificar. Todos los proveedores seleccionados no existen en el portal.", { position: "bottom-left" });
       return;
     }
 
-    // After verification, advance to step 3 (Resultados)
-    setCurrentStep(3);
+    const result = await verifyBatch(toVerify);
+
+    // If cancelled, stay on step 3 so user can see partial results and re-verify
+    if (result?.wasCancelled) {
+      return;
+    }
+
+    // After verification, advance to step 4 (Resultados)
+    setCurrentStep(4);
   };
 
-  // Triggered when user clicks "Sincronizar X de Y" in step 3
+  // Triggered when user clicks "Sincronizar X de Y" in step 4
   const handleGoToSync = () => {
     if (connectionStatus !== "connected") {
       toast.error("No hay conexión con la API. Configure las credenciales primero.", { position: "bottom-left" });
@@ -114,48 +127,42 @@ export default function ActionBar() {
     const alreadySyncedCount = selectedList.filter(r => r.status === "synced").length;
 
     if (alreadySyncedCount > 0) {
-      // Show confirmation dialog before proceeding
       setResyncSyncedCount(alreadySyncedCount);
       setShowResyncConfirm(true);
       return;
     }
 
-    // No already-synced records → proceed directly
-    setCurrentStep(4);
+    setCurrentStep(5);
   };
 
-  // Called when user confirms re-sync of already-synced records
   const handleConfirmResync = () => {
     setShowResyncConfirm(false);
-    setCurrentStep(4);
+    setCurrentStep(5);
   };
 
-  // Auto-executed when step 4 is entered
+  // Auto-executed when step 5 is entered
   const handleAutoSync = async () => {
     if (connectionStatus !== "connected") {
       toast.error("No hay conexión con la API. Configure las credenciales primero.", { position: "bottom-left" });
-      setCurrentStep(3);
+      setCurrentStep(4);
       return;
     }
 
     const toSync = records.filter(r => selectedRecords.has(r.id));
     if (toSync.length === 0) {
       toast.warning("No hay registros seleccionados para sincronizar", { position: "bottom-left" });
-      setCurrentStep(3);
+      setCurrentStep(4);
       return;
     }
 
-    // Execute real synchronization (includes already-synced if user confirmed)
     const result = await synchronizeBatch(toSync);
 
-    // If cancelled, go to step 5 with partial results (user can export what was processed)
     if (result?.wasCancelled) {
-      setCurrentStep(5);
+      setCurrentStep(6);
       return;
     }
 
-    // After sync, advance to step 5 (Finalizado) with updated grid
-    setCurrentStep(5);
+    setCurrentStep(6);
   };
 
   const handleCancel = () => {
@@ -226,7 +233,7 @@ export default function ActionBar() {
                   <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: `rgb(${r}, ${g}, ${b})` }} />
                   {isCancelling
                     ? "Cancelando... finalizando lote actual"
-                    : `${currentStep === 4 ? "Sincronizando" : "Verificando"} ${progress.current} de ${progress.total}...`
+                    : `${currentStep === 5 ? "Sincronizando" : "Verificando"} ${progress.current} de ${progress.total}...`
                   }
                 </span>
                 <div className="flex items-center gap-3">
@@ -249,8 +256,8 @@ export default function ActionBar() {
           )}
         </AnimatePresence>
 
-        {/* Step 2: Verificar */}
-        {currentStep === 2 && (
+        {/* Step 3: Verificar OCs */}
+        {currentStep === 3 && (
           <div className="flex flex-wrap items-center gap-3">
             <Button
               onClick={handleVerify}
@@ -263,8 +270,16 @@ export default function ActionBar() {
               ) : (
                 <Search className="w-4 h-4" />
               )}
-              Verificar pendientes ({pendingCount})
+              Verificar pendientes ({eligibleForVerification.filter(r => r.status === "pending" || !r.status).length})
             </Button>
+
+            {excludedBySupplier > 0 && !isProcessing && (
+              <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                {excludedBySupplier} OC excluidas (proveedor no existe)
+              </span>
+            )}
+
             <div className="flex-1" />
             {!isProcessing && (
               <Button
@@ -274,14 +289,14 @@ export default function ActionBar() {
                 className="gap-1.5 text-xs"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
-                Volver a cargar
+                Volver a proveedores
               </Button>
             )}
           </div>
         )}
 
-        {/* Step 3: Resultados - Exportar + Sincronizar X de Y */}
-        {currentStep === 3 && (
+        {/* Step 4: Resultados - Exportar + Sincronizar X de Y */}
+        {currentStep === 4 && (
           <div className="flex flex-wrap items-center gap-3">
             <Button
               variant="outline"
@@ -297,7 +312,8 @@ export default function ActionBar() {
               onClick={handleExport}
               disabled={isProcessing}
               variant="outline"
-              className="gap-2"
+              size="sm"
+              className="gap-1.5 text-xs"
             >
               <Download className="w-4 h-4" />
               Exportar todo ({totalCount})
@@ -321,8 +337,8 @@ export default function ActionBar() {
           </div>
         )}
 
-        {/* Step 4: Sincronizar - ejecución automática con opción de cancelar */}
-        {currentStep === 4 && (
+        {/* Step 5: Sincronizar - ejecución automática con opción de cancelar */}
+        {currentStep === 5 && (
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm font-medium flex items-center gap-2" style={{ color: `rgb(${r}, ${g}, ${b})` }}>
               <RefreshCw className="w-4 h-4 animate-spin" />
@@ -338,8 +354,8 @@ export default function ActionBar() {
           </div>
         )}
 
-        {/* Step 5: Finalizado - grid actualizado con resultados finales, sin opción de re-sincronizar */}
-        {currentStep === 5 && (
+        {/* Step 6: Finalizado - grid actualizado con resultados finales */}
+        {currentStep === 6 && (
           <div className="flex flex-wrap items-center gap-3">
             <Button
               onClick={handleExport}
