@@ -664,3 +664,11 @@
 - [x] Botón "Descargar reporte" CSV disponible en cada paso del wizard (paso 2, 3, 4, 6)
 - [x] Indicadores contextuales por paso: banners azul/ámbar/verde con texto descriptivo de qué está haciendo el sistema
 - [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)
+
+## Columna "Ult. Sinc" en tabla de resultados
+
+- [ ] Verificar que synchronization_date2 se mapea desde la respuesta del API en useOCVerification
+- [ ] Agregar campo lastSyncDate en OCRecord (fecha máxima entre synchronization_date y synchronization_date2)
+- [ ] Lógica: si ambas vacías o año < 2020 → "Sin dato"; si no, mostrar la mayor de las dos
+- [ ] Agregar columna "Ult. Sinc" visible en ResultsTable
+- [ ] Verificar TypeScript y tests

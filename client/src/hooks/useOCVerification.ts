@@ -149,6 +149,7 @@ export function useOCVerification() {
                 provider_name: apiResult.providerName || target.provider_name,
                 document_date: apiResult.documentDate || undefined,
                 synchronization_date: apiResult.synchronizationDate || undefined,
+                synchronization_date2: (apiResult as any).synchronizationDate2 || undefined,
                 delivery_status: apiResult.deliveryStatus || undefined,
                 canceled: apiResult.canceled != null ? String(apiResult.canceled) : undefined,
                 updated: apiResult.updated != null ? String(apiResult.updated) : undefined,

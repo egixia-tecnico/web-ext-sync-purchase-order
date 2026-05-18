@@ -21,6 +21,7 @@ export interface OCRecord {
   canceled?: string;
   updated?: string;
   synchronization_date?: string;
+  synchronization_date2?: string;
   /** Result of supplier pre-check (step 2): true=exists, false=not exists, undefined=not checked */
   supplierExists?: boolean;
   /** Error message from supplier pre-check if any */

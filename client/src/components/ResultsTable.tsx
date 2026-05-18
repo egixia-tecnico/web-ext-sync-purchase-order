@@ -94,6 +94,46 @@ function formatDate(dateStr?: string): string {
   }
 }
 
+/**
+ * Calcula la fecha de última sincronización:
+ * - Toma la fecha más alta entre synchronization_date y synchronization_date2
+ * - Si ambas están vacías o el año es < 2020, retorna "Sin dato"
+ */
+function getLastSyncDate(date1?: string, date2?: string): string {
+  const parseValidDate = (d?: string): Date | null => {
+    if (!d) return null;
+    if (d.startsWith("0000-00-00") || d === "0001-01-01T00:00:00") return null;
+    try {
+      const parsed = new Date(d);
+      if (isNaN(parsed.getTime())) return null;
+      if (parsed.getFullYear() < 2020) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
+
+  const d1 = parseValidDate(date1);
+  const d2 = parseValidDate(date2);
+
+  let best: Date | null = null;
+  if (d1 && d2) best = d1 > d2 ? d1 : d2;
+  else if (d1) best = d1;
+  else if (d2) best = d2;
+
+  if (!best) return "Sin dato";
+
+  return best.toLocaleDateString("es-CO", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }) + " " + best.toLocaleTimeString("es-CO", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 /** Priority for sorting: lower = first (non-synced first) */
 const STATUS_SORT_PRIORITY: Record<string, number> = {
   error: 0,
@@ -292,6 +332,7 @@ export default function ResultsTable() {
                 const isSelected = selectedRecords.has(record.id);
                 const docDate = formatDate(record.portalData?.documentDate);
                 const syncDate = formatDate(record.portalData?.synchronizationDate);
+                const lastSyncDate = getLastSyncDate(record.synchronization_date, record.synchronization_date2);
                 // supplierExists === false means supplier was verified and does NOT exist
                 const supplierNotExists = record.supplierExists === false;
 
@@ -372,7 +413,15 @@ export default function ResultsTable() {
                               <span className="text-xs text-muted-foreground font-mono">{syncDate}</span>
                             </div>
                           )}
-                          {!docDate && !syncDate && (
+                          <div className="flex items-center gap-1.5 mt-1 pt-1 border-t border-border/30">
+                            <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase shrink-0">Ult. Sinc</span>
+                            <span className={`text-xs font-mono ${
+                              lastSyncDate === "Sin dato"
+                                ? "text-muted-foreground/40 italic"
+                                : "text-emerald-600 font-medium"
+                            }`}>{lastSyncDate}</span>
+                          </div>
+                          {!docDate && !syncDate && lastSyncDate === "Sin dato" && (
                             <span className="text-xs text-muted-foreground/40">—</span>
                           )}
                         </div>
