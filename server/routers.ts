@@ -564,13 +564,17 @@ export const appRouter = router({
           error?: string;
         }> = [];
 
-        // Send all suppliers in a single API call (supplier_exists accepts an array)
+        // Body format: { "list_provider": [{provider_external_code_1, provider_external_code_2, ProveedorCodigoExterno3}, ...] }
+        // A supplier exists if it appears in the response list AND has exists === true.
+        // If not in response list OR exists === false → does not exist.
         try {
-          const payload = input.suppliers.map(s => ({
-            provider_external_code_1: s.providerExternalCode1,
-            provider_external_code_2: s.providerExternalCode2 || "",
-            provider_external_code_3: "",
-          }));
+          const payload = {
+            list_provider: input.suppliers.map(s => ({
+              provider_external_code_1: s.providerExternalCode1,
+              provider_external_code_2: s.providerExternalCode2 || "",
+              ProveedorCodigoExterno3: "",
+            })),
+          };
 
           const data = await callEgixiaApi(
             `/ApiManager/suppliers_v3/supplier_exists`,
@@ -579,15 +583,28 @@ export const appRouter = router({
             input.clientKey
           );
 
-          const outlist = data?.outlist_provider || [];
+          // Build a lookup map from the response list: "code1|code2" -> exists boolean
+          // The API returns the same list_provider field with an 'exists' boolean per item.
+          const responseList: any[] = data?.list_provider || [];
+          const existsMap = new Map<string, boolean>();
+          for (const item of responseList) {
+            const k1 = String(item.provider_external_code_1 || "").trim();
+            const k2 = String(item.provider_external_code_2 || "").trim();
+            const key = `${k1}|${k2}`;
+            // exists = true only if item is present AND item.exists === true
+            existsMap.set(key, item.exists === true);
+          }
 
-          for (let i = 0; i < input.suppliers.length; i++) {
-            const supplier = input.suppliers[i];
-            const apiResult = outlist[i];
+          for (const supplier of input.suppliers) {
+            const k1 = supplier.providerExternalCode1.trim();
+            const k2 = (supplier.providerExternalCode2 || "").trim();
+            const key = `${k1}|${k2}`;
+            // If not in response list → does not exist
+            const existsValue = existsMap.has(key) ? existsMap.get(key)! : false;
             results.push({
               providerExternalCode1: supplier.providerExternalCode1,
               providerExternalCode2: supplier.providerExternalCode2 || "",
-              exists: apiResult?.provider_exists === true,
+              exists: existsValue,
             });
           }
         } catch (error: any) {
@@ -644,10 +661,10 @@ export const appRouter = router({
           await deleteIntegrationLogsByClientKey(input.clientKey);
         }
 
-        console.log(`[Egixia] Verifying batch of ${input.orders.length} orders (grouped by sociedad, up to 50 per request)`);
+        console.log(`[Egixia] Verifying batch of ${input.orders.length} orders (grouped by sociedad, up to 40 per request)`);
 
         const results: any[] = [];
-        const OC_BATCH_SIZE = 50;
+        const OC_BATCH_SIZE = 40;
 
         // Step 1: Group orders by buyer_external_code (sociedad)
         const byBuyer = new Map<string, typeof input.orders>();

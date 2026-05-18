@@ -643,3 +643,10 @@
 - [x] Identificar qué opciones del menú están ocultas o restringidas
 - [x] checkAdminSession ahora reconoce login OAuth de @egixia.com (prioridad 1) además del magic link (prioridad 2)
 - [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)
+
+## Correcciones de integración (formato body y lotes)
+
+- [x] Corregir body de supplier_exists: envolver en { "list_provider": [...] } con campo ProveedorCodigoExterno3
+- [x] Corregir lógica de existencia: proveedor existe si aparece en list_provider de la respuesta Y tiene exists=true (si no aparece en la lista o exists=false → no existe)
+- [x] Reducir lote de OCs de 50 a 40 por sociedad
+- [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)
