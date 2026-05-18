@@ -583,16 +583,17 @@ export const appRouter = router({
             input.clientKey
           );
 
-          // Build a lookup map from the response list: "code1|code2" -> exists boolean
-          // The API returns the same list_provider field with an 'exists' boolean per item.
-          const responseList: any[] = data?.list_provider || [];
+          // Response field: outlist_provider (array)
+          // Existence field per item: provider_exists (boolean)
+          // A supplier exists if it appears in outlist_provider AND provider_exists === true.
+          // If not in the list OR provider_exists === false → does not exist.
+          const responseList: any[] = data?.outlist_provider || [];
           const existsMap = new Map<string, boolean>();
           for (const item of responseList) {
             const k1 = String(item.provider_external_code_1 || "").trim();
             const k2 = String(item.provider_external_code_2 || "").trim();
-            const key = `${k1}|${k2}`;
-            // exists = true only if item is present AND item.exists === true
-            existsMap.set(key, item.exists === true);
+            // Index by code1|code2 (code2 may be empty string)
+            existsMap.set(`${k1}|${k2}`, item.provider_exists === true);
           }
 
           for (const supplier of input.suppliers) {

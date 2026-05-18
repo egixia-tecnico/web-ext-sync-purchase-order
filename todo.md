@@ -650,3 +650,10 @@
 - [x] Corregir lógica de existencia: proveedor existe si aparece en list_provider de la respuesta Y tiene exists=true (si no aparece en la lista o exists=false → no existe)
 - [x] Reducir lote de OCs de 50 a 40 por sociedad
 - [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)
+
+## Corrección parsing respuesta supplier_exists
+
+- [x] Usar outlist_provider (no list_provider) como campo de respuesta
+- [x] Usar provider_exists (no exists) como campo booleano de existencia
+- [x] Clave de lookup code1|code2 (code2 puede ser string vacío)
+- [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)
