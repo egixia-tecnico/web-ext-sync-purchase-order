@@ -637,3 +637,9 @@
 - [x] Backend: cruzar respuesta SDTOrdenesCompra[] con cada OC del lote mediante Map para determinar found/not_found
 - [x] Backend: eliminar llamadas individuales por OC (GET .../list?buyer_external_code=X&purchase_order_number=Y)
 - [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)
+
+## Menú completo para usuario @egixia.com autenticado
+
+- [x] Identificar qué opciones del menú están ocultas o restringidas
+- [x] checkAdminSession ahora reconoce login OAuth de @egixia.com (prioridad 1) además del magic link (prioridad 2)
+- [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)

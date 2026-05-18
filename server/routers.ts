@@ -498,7 +498,12 @@ export const appRouter = router({
       }),
     
     checkAdminSession: publicProcedure.query(({ ctx }) => {
-      // Read admin_session cookie from request
+      // Priority 1: Check Manus OAuth session — if the authenticated user has an @egixia.com email, grant admin access
+      if (ctx.user && ctx.user.email && ctx.user.email.endsWith("@egixia.com")) {
+        return { isAdmin: true, email: ctx.user.email };
+      }
+
+      // Priority 2: Check magic-link admin_session cookie (passwordless login for @egixia.com admins)
       const cookies = ctx.req.headers.cookie || "";
       const adminSessionMatch = cookies.match(/admin_session=([^;]+)/);
       
