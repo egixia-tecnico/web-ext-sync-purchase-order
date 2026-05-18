@@ -612,8 +612,8 @@ export const appRouter = router({
         };
       }),
 
-    // Verify a small batch of purchase orders (frontend splits into batches)
-    // Each call processes a small set of OC to avoid gateway timeout
+    // Verify a batch of purchase orders grouped by buyer (sociedad), up to 50 OCs per API call.
+    // Uses purchase_order_number_array query params to batch-query the portal.
     verifyPurchaseOrders: publicProcedure
       .input(z.object({
         orders: z.array(z.object({
@@ -639,79 +639,91 @@ export const appRouter = router({
           await deleteIntegrationLogsByClientKey(input.clientKey);
         }
 
-        console.log(`[Egixia] Verifying batch of ${input.orders.length} orders`);
+        console.log(`[Egixia] Verifying batch of ${input.orders.length} orders (grouped by sociedad, up to 50 per request)`);
 
         const results: any[] = [];
+        const OC_BATCH_SIZE = 50;
 
-        // Process each order in this batch sequentially
+        // Step 1: Group orders by buyer_external_code (sociedad)
+        const byBuyer = new Map<string, typeof input.orders>();
         for (const order of input.orders) {
-          try {
-            const data = await callEgixiaApi(
-              `/apimanager/purchase_order_v1/list?buyer_external_code=${order.buyerCode}&purchase_order_number=${order.purchaseOrderId}`,
-              "GET",
-              undefined,
-              input.clientKey
-            );
+          const key = (order.buyerCode ?? "").trim();
+          if (!byBuyer.has(key)) byBuyer.set(key, []);
+          byBuyer.get(key)!.push(order);
+        }
 
-            // Check if order is synchronized (SDTOrdenesCompra has data)
-            if (data && data.SDTOrdenesCompra && Array.isArray(data.SDTOrdenesCompra) && data.SDTOrdenesCompra.length > 0) {
-              const orderData = data.SDTOrdenesCompra.find(
-                (oc: any) =>
-                  oc.buyer_external_code === order.buyerCode &&
-                  oc.purchase_order_number === order.purchaseOrderId
-              );
+        // Step 2: For each sociedad, split into sub-batches of OC_BATCH_SIZE and query the API
+        for (const [buyerCode, buyerOrders] of Array.from(byBuyer.entries())) {
+          // Split into sub-batches of up to 50 OCs
+          for (let i = 0; i < buyerOrders.length; i += OC_BATCH_SIZE) {
+            const subBatch = buyerOrders.slice(i, i + OC_BATCH_SIZE);
 
-              if (orderData) {
+            // Build URL with repeated purchase_order_number_array params
+            const arrayParams = subBatch
+              .map((o: { purchaseOrderId: string; providerExternalCode1: string; providerExternalCode2?: string; buyerCode?: string }) => `purchase_order_number_array=${encodeURIComponent(o.purchaseOrderId.trim())}`)
+              .join("&");
+            const url = `/apimanager/purchase_order_v1/list?buyer_external_code=${encodeURIComponent(buyerCode)}&${arrayParams}`;
+
+            try {
+              const data = await callEgixiaApi(url, "GET", undefined, input.clientKey);
+
+              // Build a lookup map from the API response: purchaseOrderNumber -> orderData
+              const foundMap = new Map<string, any>();
+              if (data?.SDTOrdenesCompra && Array.isArray(data.SDTOrdenesCompra)) {
+                for (const oc of data.SDTOrdenesCompra) {
+                  if (oc.purchase_order_number) {
+                    foundMap.set(String(oc.purchase_order_number).trim(), oc);
+                  }
+                }
+              }
+
+              // Cross-reference each OC in the sub-batch with the API response
+              for (const order of subBatch) {
+                const orderData = foundMap.get(order.purchaseOrderId.trim());
+                if (orderData) {
+                  results.push({
+                    purchaseOrderId: order.purchaseOrderId,
+                    providerExternalCode1: order.providerExternalCode1,
+                    providerExternalCode2: order.providerExternalCode2 || "",
+                    providerExternalCode3: orderData.provider_external_code3 || "",
+                    buyerCode: order.buyerCode,
+                    buyerName: orderData.buyer_name || null,
+                    providerName: orderData.provider_name || null,
+                    status: "found",
+                    syncStatus: "synchronized",
+                    documentDate: orderData.document_date || null,
+                    synchronizationDate: orderData.synchronization_date || null,
+                    deliveryStatus: orderData.delivery_status || null,
+                    canceled: orderData.canceled || null,
+                    updated: orderData.updated || null,
+                  });
+                } else {
+                  // OC not found in portal — supplier was already verified in step 2
+                  results.push({
+                    purchaseOrderId: order.purchaseOrderId,
+                    providerExternalCode1: order.providerExternalCode1,
+                    providerExternalCode2: order.providerExternalCode2 || "",
+                    buyerCode: order.buyerCode,
+                    status: "not_found",
+                    syncStatus: null,
+                    error: null,
+                  });
+                }
+              }
+            } catch (error: any) {
+              // If the batch request fails, mark all OCs in this sub-batch as error
+              for (const order of subBatch) {
                 results.push({
                   purchaseOrderId: order.purchaseOrderId,
                   providerExternalCode1: order.providerExternalCode1,
                   providerExternalCode2: order.providerExternalCode2 || "",
-                  providerExternalCode3: orderData.provider_external_code3 || "",
                   buyerCode: order.buyerCode,
-                  buyerName: orderData.buyer_name || null,
-                  providerName: orderData.provider_name || null,
-                  status: "found",
-                  syncStatus: "synchronized",
-                  documentDate: orderData.document_date || null,
-                  synchronizationDate: orderData.synchronization_date || null,
-                  deliveryStatus: orderData.delivery_status || null,
-                  canceled: orderData.canceled || null,
-                  updated: orderData.updated || null,
-                });
-              } else {
-                // OC not found in portal — supplier was already verified in step 2
-                results.push({
-                  purchaseOrderId: order.purchaseOrderId,
-                  providerExternalCode1: order.providerExternalCode1,
-                  providerExternalCode2: order.providerExternalCode2 || "",
-                  buyerCode: order.buyerCode,
-                  status: "not_found",
+                  status: "error",
                   syncStatus: null,
-                  error: null,
+                  error: error.message,
                 });
               }
-            } else {
-              // OC not found in portal — supplier was already verified in step 2
-              results.push({
-                purchaseOrderId: order.purchaseOrderId,
-                providerExternalCode1: order.providerExternalCode1,
-                providerExternalCode2: order.providerExternalCode2 || "",
-                buyerCode: order.buyerCode,
-                status: "not_found",
-                syncStatus: null,
-                error: null,
-              });
             }
-          } catch (error: any) {
-            results.push({
-              purchaseOrderId: order.purchaseOrderId,
-              providerExternalCode1: order.providerExternalCode1,
-              providerExternalCode2: order.providerExternalCode2 || "",
-              buyerCode: order.buyerCode,
-              status: "error",
-              syncStatus: null,
-              error: error.message,
-            });
           }
         }
 

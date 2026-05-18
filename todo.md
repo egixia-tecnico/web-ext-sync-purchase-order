@@ -629,3 +629,11 @@
 - [x] Home.tsx: SupplierCheckPanel en step 2, KPIDashboard desde step 4, ActionBar/ResultsTable desde step 3
 - [x] Eliminado checkSupplierExists de verifyPurchaseOrders (OCs no encontradas → not_found directo)
 - [x] TypeScript: 0 errores | Tests: 24/24 pasando
+
+## Verificación de OCs por lotes agrupados por sociedad
+
+- [x] Backend: reescribir verifyPurchaseOrders para agrupar OCs por buyer_external_code (sociedad)
+- [x] Backend: enviar hasta 50 OCs por request usando purchase_order_number_array (query params repetidos)
+- [x] Backend: cruzar respuesta SDTOrdenesCompra[] con cada OC del lote mediante Map para determinar found/not_found
+- [x] Backend: eliminar llamadas individuales por OC (GET .../list?buyer_external_code=X&purchase_order_number=Y)
+- [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)
