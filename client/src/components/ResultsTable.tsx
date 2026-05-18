@@ -292,6 +292,8 @@ export default function ResultsTable() {
                 const isSelected = selectedRecords.has(record.id);
                 const docDate = formatDate(record.portalData?.documentDate);
                 const syncDate = formatDate(record.portalData?.synchronizationDate);
+                // supplierExists === false means supplier was verified and does NOT exist
+                const supplierNotExists = record.supplierExists === false;
 
                 return (
                   <motion.tr
@@ -301,17 +303,33 @@ export default function ResultsTable() {
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.15, delay: idx * 0.01 }}
                     className={`
-                      border-b border-border/50 hover:bg-muted/30 transition-colors
-                      ${isSelected ? "bg-primary/5" : ""}
+                      border-b border-border/50 transition-colors
+                      ${supplierNotExists
+                        ? "opacity-50 bg-muted/20 cursor-not-allowed"
+                        : `hover:bg-muted/30 ${isSelected ? "bg-primary/5" : ""}`
+                      }
                     `}
-                    style={{ borderLeft: `3px solid ${config.borderColor}` }}
+                    style={{ borderLeft: `3px solid ${supplierNotExists ? "#e2e8f0" : config.borderColor}` }}
                   >
                     {showCheckboxes && (
                       <td className="p-3">
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={() => toggleSelection(record.id)}
-                        />
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span>
+                              <Checkbox
+                                checked={supplierNotExists ? false : isSelected}
+                                disabled={supplierNotExists}
+                                onCheckedChange={supplierNotExists ? undefined : () => toggleSelection(record.id)}
+                                className={supplierNotExists ? "cursor-not-allowed opacity-40" : ""}
+                              />
+                            </span>
+                          </TooltipTrigger>
+                          {supplierNotExists && (
+                            <TooltipContent side="right">
+                              <p className="text-xs">Proveedor no existe en el portal</p>
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
                       </td>
                     )}
                     <td className="p-3">
@@ -361,7 +379,12 @@ export default function ResultsTable() {
                       </td>
                     )}
                     <td className="p-3 hidden lg:table-cell">
-                      {record.statusMessage ? (
+                      {supplierNotExists ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-red-600">
+                          <UserX className="w-3.5 h-3.5 shrink-0" />
+                          Proveedor no existe
+                        </span>
+                      ) : record.statusMessage ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <span className="text-xs text-muted-foreground truncate max-w-[300px] block cursor-help">

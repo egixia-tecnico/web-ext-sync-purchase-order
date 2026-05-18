@@ -14,10 +14,11 @@ import { useClientKey } from "@/contexts/ClientKeyContext";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { downloadCSV } from "@/lib/file-parser";
 import { toast } from "sonner";
 import {
   Users, CheckCircle2, XCircle, AlertTriangle, ArrowRight,
-  Loader2, RefreshCw, Building2,
+  Loader2, RefreshCw, Building2, Download, Info,
 } from "lucide-react";
 
 const SUPPLIER_BATCH_SIZE = 50;
@@ -173,6 +174,30 @@ export default function SupplierCheckPanel() {
     setCurrentStep(3);
   };
 
+  const handleExportProviders = () => {
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, "0")}_${String(now.getDate()).padStart(2, "0")}`;
+    // Build a summary CSV of unique suppliers with their status
+    const supplierRows = records.reduce<{ id: string; provider_external_code_1: string; provider_external_code_2: string; supplierExists: string; supplierCheckError: string }[]>((acc, rec) => {
+      const code1 = rec.provider_external_code_1 || rec.provider_external_code || "";
+      const code2 = rec.provider_external_code_2 || "";
+      const key = `${code1}|${code2}`;
+      if (!acc.find(r => r.id === key)) {
+        acc.push({
+          id: key,
+          provider_external_code_1: code1,
+          provider_external_code_2: code2,
+          supplierExists: rec.supplierExists === true ? "Existe" : rec.supplierExists === false ? "No existe" : "Sin verificar",
+          supplierCheckError: rec.supplierCheckError || "",
+        });
+      }
+      return acc;
+    }, []);
+    // Use downloadCSV with a compatible shape
+    downloadCSV(supplierRows as any, `reporte_proveedores_${dateStr}.csv`);
+    toast.success(`${supplierRows.length} proveedores exportados`, { position: "bottom-left" });
+  };
+
   const progressPercent = progress.total > 0
     ? Math.round((progress.current / progress.total) * 100)
     : 0;
@@ -186,6 +211,15 @@ export default function SupplierCheckPanel() {
       transition={{ duration: 0.4 }}
       className="bg-card rounded-xl border shadow-sm p-6 space-y-5"
     >
+      {/* Indicador contextual */}
+      <div className="flex items-start gap-2 px-3 py-2 rounded-lg border text-xs text-blue-600 bg-blue-50 border-blue-200">
+        <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+        <span>
+          El sistema consulta el portal de proveedores para validar cuáles existen antes de procesar las órdenes de compra.
+          Las OCs de proveedores no encontrados serán excluidas automáticamente.
+        </span>
+      </div>
+
       {/* Header */}
       <div className="flex items-center gap-3">
         <div
@@ -318,15 +352,26 @@ export default function SupplierCheckPanel() {
 
             {/* Action buttons */}
             <div className="flex items-center justify-between pt-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleRetry}
-                className="text-xs gap-1.5"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Reverificar
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRetry}
+                  className="text-xs gap-1.5"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Reverificar
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportProviders}
+                  className="text-xs gap-1.5"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Descargar reporte
+                </Button>
+              </div>
               <Button
                 size="sm"
                 onClick={handleContinue}

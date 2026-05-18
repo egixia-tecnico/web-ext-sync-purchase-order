@@ -657,3 +657,10 @@
 - [x] Usar provider_exists (no exists) como campo booleano de existencia
 - [x] Clave de lookup code1|code2 (code2 puede ser string vacío)
 - [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)
+
+## UX: Filas deshabilitadas por proveedor no existente + descarga por paso + indicadores
+
+- [x] ResultsTable: filas con supplierExists=false → checkbox deshabilitado, fila opaca, comentario "Proveedor no existe" en columna Detalle (rojo)
+- [x] Botón "Descargar reporte" CSV disponible en cada paso del wizard (paso 2, 3, 4, 6)
+- [x] Indicadores contextuales por paso: banners azul/ámbar/verde con texto descriptivo de qué está haciendo el sistema
+- [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)

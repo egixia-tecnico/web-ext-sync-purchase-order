@@ -1,13 +1,15 @@
 /**
  * ActionBar - Barra de acciones contextual por step
- * 
+ *
  * Step 2 (Proveedores): Manejado por SupplierCheckPanel - ActionBar no se muestra
  * Step 3 (Verificar OCs): Botón "Verificar pendientes" → solo OCs con supplierExists !== false
- * Step 4 (Resultados): "Exportar" + "Sincronizar X de Y"
- * Step 5 (Sincronizar): Progreso automático → al completar pasa a Step 6
- * Step 6 (Finalizado): "Exportar resultados", sin opción de re-sincronizar
- * 
+ *                         + Botón "Descargar reporte" (estado actual)
+ * Step 4 (Resultados):   "Descargar reporte" + "Sincronizar X de Y"
+ * Step 5 (Sincronizar):  Progreso automático → al completar pasa a Step 6
+ * Step 6 (Finalizado):   "Descargar reporte final"
+ *
  * CANCELACIÓN: Botón "Cancelar" visible durante verificación (step 3) y sincronización (step 5)
+ * INDICADORES: Texto contextual en cada step explicando qué está haciendo el sistema
  */
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -30,8 +32,32 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Search, Download, ArrowLeft, RefreshCw,
-  Loader2, AlertTriangle, XCircle,
+  Loader2, AlertTriangle, XCircle, Info, CheckCircle2,
 } from "lucide-react";
+
+/** Indicador contextual por step */
+const STEP_CONTEXT: Record<number, { icon: React.ReactNode; text: string; color: string }> = {
+  3: {
+    icon: <Search className="w-3.5 h-3.5" />,
+    text: "Consultando el portal de proveedores para verificar si cada OC existe. Las OCs de proveedores no encontrados están excluidas.",
+    color: "text-blue-600 bg-blue-50 border-blue-200",
+  },
+  4: {
+    icon: <Info className="w-3.5 h-3.5" />,
+    text: "Revisá los resultados. Las OCs no encontradas están preseleccionadas para sincronizar. Podés ajustar la selección antes de continuar.",
+    color: "text-amber-700 bg-amber-50 border-amber-200",
+  },
+  5: {
+    icon: <RefreshCw className="w-3.5 h-3.5 animate-spin" />,
+    text: "Enviando las OCs seleccionadas al portal de proveedores para su sincronización. No cierres esta ventana.",
+    color: "text-indigo-600 bg-indigo-50 border-indigo-200",
+  },
+  6: {
+    icon: <CheckCircle2 className="w-3.5 h-3.5" />,
+    text: "Proceso finalizado. Descargá el reporte con los resultados de la sincronización.",
+    color: "text-emerald-700 bg-emerald-50 border-emerald-200",
+  },
+};
 
 export default function ActionBar() {
   const {
@@ -81,7 +107,6 @@ export default function ActionBar() {
   const progressPercent = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
 
   // Records eligible for verification: those whose supplier was verified as existing
-  // (supplierExists === true, or undefined if supplier check was not done/errored)
   const eligibleForVerification = records.filter(r => r.supplierExists !== false);
   const excludedBySupplier = records.filter(r => r.supplierExists === false).length;
 
@@ -91,7 +116,6 @@ export default function ActionBar() {
       return;
     }
 
-    // Only verify records with verified suppliers (supplierExists !== false)
     const toVerify = eligibleForVerification.filter(r => selectedRecords.has(r.id));
 
     if (toVerify.length === 0) {
@@ -101,16 +125,13 @@ export default function ActionBar() {
 
     const result = await verifyBatch(toVerify);
 
-    // If cancelled, stay on step 3 so user can see partial results and re-verify
     if (result?.wasCancelled) {
       return;
     }
 
-    // After verification, advance to step 4 (Resultados)
     setCurrentStep(4);
   };
 
-  // Triggered when user clicks "Sincronizar X de Y" in step 4
   const handleGoToSync = () => {
     if (connectionStatus !== "connected") {
       toast.error("No hay conexión con la API. Configure las credenciales primero.", { position: "bottom-left" });
@@ -122,7 +143,6 @@ export default function ActionBar() {
       return;
     }
 
-    // Check if any selected records are already synced
     const selectedList = records.filter(r => selectedRecords.has(r.id));
     const alreadySyncedCount = selectedList.filter(r => r.status === "synced").length;
 
@@ -140,7 +160,6 @@ export default function ActionBar() {
     setCurrentStep(5);
   };
 
-  // Auto-executed when step 5 is entered
   const handleAutoSync = async () => {
     if (connectionStatus !== "connected") {
       toast.error("No hay conexión con la API. Configure las credenciales primero.", { position: "bottom-left" });
@@ -169,13 +188,36 @@ export default function ActionBar() {
     cancelProcess();
   };
 
-  const handleExport = () => {
-    const toExport = records;
+  /** Genera nombre de archivo con fecha YYYY_MM_DD */
+  const buildFileName = (prefix: string) => {
     const now = new Date();
     const dateStr = `${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, "0")}_${String(now.getDate()).padStart(2, "0")}`;
-    downloadCSV(toExport, `verificacion_oc_${dateStr}.csv`);
+    return `${prefix}_${dateStr}.csv`;
+  };
+
+  /** Descarga el reporte del paso actual */
+  const handleExportStep = (step: number) => {
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, "0")}_${String(now.getDate()).padStart(2, "0")}`;
+
+    let filename = "";
+    let toExport = records;
+
+    if (step === 3) {
+      filename = buildFileName("reporte_verificacion_oc");
+    } else if (step === 4) {
+      filename = buildFileName("reporte_resultados_oc");
+    } else if (step === 5) {
+      filename = buildFileName("reporte_sincronizacion_parcial_oc");
+    } else {
+      filename = buildFileName("reporte_final_oc");
+    }
+
+    downloadCSV(toExport, filename);
     toast.success(`${toExport.length} registros exportados`, { position: "bottom-left" });
   };
+
+  const stepCtx = STEP_CONTEXT[currentStep];
 
   return (
     <>
@@ -217,8 +259,16 @@ export default function ActionBar() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="bg-card rounded-xl border shadow-sm p-4"
+        className="bg-card rounded-xl border shadow-sm p-4 space-y-3"
       >
+        {/* Indicador contextual del paso actual */}
+        {stepCtx && (
+          <div className={`flex items-start gap-2 px-3 py-2 rounded-lg border text-xs ${stepCtx.color}`}>
+            <span className="mt-0.5 shrink-0">{stepCtx.icon}</span>
+            <span>{stepCtx.text}</span>
+          </div>
+        )}
+
         {/* Progress bar during processing */}
         <AnimatePresence>
           {isProcessing && (
@@ -226,7 +276,6 @@ export default function ActionBar() {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="mb-4"
             >
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-medium text-muted-foreground flex items-center gap-2">
@@ -281,6 +330,19 @@ export default function ActionBar() {
             )}
 
             <div className="flex-1" />
+
+            {/* Descarga del reporte parcial de verificación */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleExportStep(3)}
+              disabled={isProcessing}
+              className="gap-1.5 text-xs"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Descargar reporte
+            </Button>
+
             {!isProcessing && (
               <Button
                 variant="outline"
@@ -308,15 +370,16 @@ export default function ActionBar() {
               Anterior
             </Button>
 
+            {/* Descarga del reporte de resultados */}
             <Button
-              onClick={handleExport}
+              onClick={() => handleExportStep(4)}
               disabled={isProcessing}
               variant="outline"
               size="sm"
               className="gap-1.5 text-xs"
             >
               <Download className="w-4 h-4" />
-              Exportar todo ({totalCount})
+              Descargar reporte ({totalCount})
             </Button>
 
             <div className="flex-1" />
@@ -354,16 +417,16 @@ export default function ActionBar() {
           </div>
         )}
 
-        {/* Step 6: Finalizado - grid actualizado con resultados finales */}
+        {/* Step 6: Finalizado - reporte final */}
         {currentStep === 6 && (
           <div className="flex flex-wrap items-center gap-3">
             <Button
-              onClick={handleExport}
+              onClick={() => handleExportStep(6)}
               className="gap-2 text-white"
               style={{ backgroundColor: `rgb(${r}, ${g}, ${b})` }}
             >
               <Download className="w-4 h-4" />
-              Exportar resultados ({totalCount})
+              Descargar reporte final ({totalCount})
             </Button>
 
             <div className="flex-1" />
