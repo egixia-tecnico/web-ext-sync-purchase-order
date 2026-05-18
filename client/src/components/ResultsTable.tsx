@@ -1,10 +1,9 @@
 /**
  * ResultsTable - Tabla de resultados con paginación configurable, scroll visible.
  * Fechas "0000-00-00T00:00:00" se muestran en blanco.
- * Fechas en una sola columna (Fecha Doc / Fecha Sync).
+ * Columna Despacho con delivery_status.
+ * Filtros avanzados rápidos: estado, despacho, proveedor, Ult. Sinc.
  * Ordenamiento: no-sincronizados primero, sincronizados al final.
- * En step 3+: registros "synced" deseleccionados, los demás seleccionados.
- * Filtro controlado por activeKPIFilter del contexto (clic en KPI cards).
  */
 import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -15,9 +14,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
 import {
   Search, ChevronDown, ChevronUp, CheckCircle2, XCircle,
-  UserX, AlertTriangle, Clock, Loader2, AlertOctagon, ChevronLeft, ChevronRight
+  UserX, AlertTriangle, Clock, Loader2, AlertOctagon, ChevronLeft, ChevronRight,
+  Filter, X, Truck
 } from "lucide-react";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: string; borderColor: string; icon: React.ReactNode }> = {
@@ -72,11 +73,29 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: str
   },
 };
 
+/** Colores para delivery_status */
+function getDeliveryBadge(status?: string): { label: string; className: string } {
+  if (!status || status.trim() === "") return { label: "—", className: "text-muted-foreground/40 bg-transparent border-0 shadow-none" };
+  const s = status.trim().toLowerCase();
+  if (s.includes("entregad") || s.includes("complet") || s.includes("delivered")) {
+    return { label: status, className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+  }
+  if (s.includes("parcia") || s.includes("partial")) {
+    return { label: status, className: "bg-blue-50 text-blue-700 border-blue-200" };
+  }
+  if (s.includes("pendient") || s.includes("pending") || s.includes("abiert") || s.includes("open")) {
+    return { label: status, className: "bg-amber-50 text-amber-700 border-amber-200" };
+  }
+  if (s.includes("cancel") || s.includes("anulad")) {
+    return { label: status, className: "bg-red-50 text-red-700 border-red-200" };
+  }
+  return { label: status, className: "bg-slate-50 text-slate-600 border-slate-200" };
+}
+
 /** Formatea fecha: si es "0000-00-00..." o vacía, retorna "" */
 function formatDate(dateStr?: string): string {
   if (!dateStr) return "";
   if (dateStr.startsWith("0000-00-00") || dateStr === "0001-01-01T00:00:00") return "";
-  // Try to format nicely
   try {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return "";
@@ -145,6 +164,13 @@ const STATUS_SORT_PRIORITY: Record<string, number> = {
   synced: 6,
 };
 
+type QuickFilter = {
+  id: string;
+  label: string;
+  fn: (r: OCRecord) => boolean;
+  color: string;
+};
+
 export default function ResultsTable() {
   const {
     records, selectedRecords, toggleSelection, selectAll, deselectAll,
@@ -155,11 +181,87 @@ export default function ResultsTable() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
+  const [showFilters, setShowFilters] = useState(false);
+  const [activeQuickFilters, setActiveQuickFilters] = useState<Set<string>>(new Set());
 
   // Reset page when filter changes
   useEffect(() => {
     setPage(0);
-  }, [activeKPIFilter, searchTerm]);
+  }, [activeKPIFilter, searchTerm, activeQuickFilters]);
+
+  // Collect unique delivery_status values from records
+  const deliveryStatuses = useMemo(() => {
+    const set = new Set<string>();
+    records.forEach(r => {
+      const ds = r.delivery_status || r.portalData?.deliveryStatus;
+      if (ds && ds.trim()) set.add(ds.trim());
+    });
+    return Array.from(set).sort();
+  }, [records]);
+
+  // Build quick filter definitions
+  const quickFilters: QuickFilter[] = useMemo(() => {
+    const filters: QuickFilter[] = [
+      {
+        id: "not_found",
+        label: "No encontradas",
+        fn: (r) => r.status === "not_found",
+        color: "bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100",
+      },
+      {
+        id: "synced",
+        label: "Sincronizadas",
+        fn: (r) => r.status === "synced",
+        color: "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100",
+      },
+      {
+        id: "error",
+        label: "Con error",
+        fn: (r) => r.status === "error" || r.status === "synced_with_error",
+        color: "bg-red-50 text-red-700 border-red-300 hover:bg-red-100",
+      },
+      {
+        id: "supplier_not_exists",
+        label: "Proveedor no existe",
+        fn: (r) => r.supplierExists === false,
+        color: "bg-rose-50 text-rose-700 border-rose-300 hover:bg-rose-100",
+      },
+      {
+        id: "has_sync_date",
+        label: "Con Ult. Sinc",
+        fn: (r) => getLastSyncDate(r.synchronization_date, r.synchronization_date2) !== "Sin dato",
+        color: "bg-teal-50 text-teal-700 border-teal-300 hover:bg-teal-100",
+      },
+      {
+        id: "no_sync_date",
+        label: "Sin Ult. Sinc",
+        fn: (r) => getLastSyncDate(r.synchronization_date, r.synchronization_date2) === "Sin dato",
+        color: "bg-slate-50 text-slate-600 border-slate-300 hover:bg-slate-100",
+      },
+      // Dynamic delivery_status filters
+      ...deliveryStatuses.map(ds => ({
+        id: `delivery_${ds}`,
+        label: `Despacho: ${ds}`,
+        fn: (r: OCRecord) => (r.delivery_status || r.portalData?.deliveryStatus || "").trim() === ds,
+        color: "bg-blue-50 text-blue-700 border-blue-300 hover:bg-blue-100",
+      })),
+    ];
+    return filters;
+  }, [deliveryStatuses]);
+
+  const toggleQuickFilter = (id: string) => {
+    setActiveQuickFilters(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const clearAllFilters = () => {
+    setActiveQuickFilters(new Set());
+    setSearchTerm("");
+  };
 
   const filteredRecords = useMemo(() => {
     let result = [...records];
@@ -167,6 +269,14 @@ export default function ResultsTable() {
     // Apply KPI filter from context
     if (activeKPIFilter) {
       result = result.filter(r => r.status === activeKPIFilter);
+    }
+
+    // Apply quick filters (OR within active filters)
+    if (activeQuickFilters.size > 0) {
+      const activeFilterFns = quickFilters
+        .filter(f => activeQuickFilters.has(f.id))
+        .map(f => f.fn);
+      result = result.filter(r => activeFilterFns.some(fn => fn(r)));
     }
 
     if (searchTerm) {
@@ -177,7 +287,8 @@ export default function ResultsTable() {
         formatProviderCodes(r.provider_external_code_1, r.provider_external_code_2).toLowerCase().includes(term) ||
         (r.buyer_name || "").toLowerCase().includes(term) ||
         (r.provider_name || "").toLowerCase().includes(term) ||
-        (r.statusMessage || "").toLowerCase().includes(term)
+        (r.statusMessage || "").toLowerCase().includes(term) ||
+        (r.delivery_status || r.portalData?.deliveryStatus || "").toLowerCase().includes(term)
       );
     }
 
@@ -192,7 +303,7 @@ export default function ResultsTable() {
     });
 
     return result;
-  }, [records, searchTerm, activeKPIFilter, sortField, sortDir]);
+  }, [records, searchTerm, activeKPIFilter, activeQuickFilters, quickFilters, sortField, sortDir]);
 
   const paginatedRecords = useMemo(() => {
     return filteredRecords.slice(page * pageSize, (page + 1) * pageSize);
@@ -204,7 +315,6 @@ export default function ResultsTable() {
   if (currentStep < 2) return null;
 
   const allFilteredSelected = filteredRecords.length > 0 && filteredRecords.every(r => selectedRecords.has(r.id));
-  const someFilteredSelected = filteredRecords.some(r => selectedRecords.has(r.id)) && !allFilteredSelected;
 
   const handleSort = (field: keyof OCRecord) => {
     if (sortField === field) {
@@ -217,10 +327,8 @@ export default function ResultsTable() {
 
   const handleSelectAllFiltered = () => {
     if (allFilteredSelected) {
-      // Deselect all filtered
       deselectAll();
     } else {
-      // Select all filtered
       const newIds = filteredRecords.map(r => r.id);
       newIds.forEach(id => {
         if (!selectedRecords.has(id)) {
@@ -235,10 +343,13 @@ export default function ResultsTable() {
     return sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />;
   };
 
-  // Show date column from step 2+ (during and after verification)
-  const showDateColumn = currentStep >= 2;
-  // In step 5 (Exportar), hide checkboxes
-  const showCheckboxes = currentStep !== 5;
+  // Show date column from step 3+ (during and after verification)
+  const showDateColumn = currentStep >= 3;
+  // Show despacho column from step 3+
+  const showDespachoColumn = currentStep >= 3;
+  // In step 6 (Finalizado), hide checkboxes
+  const showCheckboxes = currentStep !== 6;
+  const hasActiveFilters = activeQuickFilters.size > 0 || searchTerm.length > 0;
 
   return (
     <motion.div
@@ -248,34 +359,118 @@ export default function ResultsTable() {
       className="bg-card rounded-xl border shadow-sm overflow-hidden"
     >
       {/* Toolbar */}
-      <div className="p-3 border-b flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por OC, comprador, proveedor..."
-            value={searchTerm}
-            onChange={(e) => { setSearchTerm(e.target.value); setPage(0); }}
-            className="pl-9 h-9 text-sm"
-          />
+      <div className="p-3 border-b space-y-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por OC, comprador, proveedor, despacho..."
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setPage(0); }}
+              className="pl-9 h-9 text-sm"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className={`h-9 gap-1.5 text-xs ${showFilters ? "bg-primary/10 border-primary/30 text-primary" : ""}`}
+              onClick={() => setShowFilters(v => !v)}
+            >
+              <Filter className="w-3.5 h-3.5" />
+              Filtros
+              {activeQuickFilters.size > 0 && (
+                <span className="ml-1 bg-primary text-primary-foreground rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">
+                  {activeQuickFilters.size}
+                </span>
+              )}
+            </Button>
+            {hasActiveFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 gap-1 text-xs text-muted-foreground hover:text-foreground"
+                onClick={clearAllFilters}
+              >
+                <X className="w-3.5 h-3.5" />
+                Limpiar
+              </Button>
+            )}
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
+              {filteredRecords.length} de {records.length} registros
+              {selectedRecords.size > 0 && ` · ${selectedRecords.size} sel.`}
+            </span>
+            <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(0); }}>
+              <SelectTrigger className="w-[90px] h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10 / pág</SelectItem>
+                <SelectItem value="25">25 / pág</SelectItem>
+                <SelectItem value="50">50 / pág</SelectItem>
+                <SelectItem value="100">100 / pág</SelectItem>
+                <SelectItem value="200">200 / pág</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground whitespace-nowrap">
-            {filteredRecords.length} de {records.length} registros
-            {selectedRecords.size > 0 && ` · ${selectedRecords.size} seleccionados`}
-          </span>
-          <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(0); }}>
-            <SelectTrigger className="w-[90px] h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="10">10 / pág</SelectItem>
-              <SelectItem value="25">25 / pág</SelectItem>
-              <SelectItem value="50">50 / pág</SelectItem>
-              <SelectItem value="100">100 / pág</SelectItem>
-              <SelectItem value="200">200 / pág</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+
+        {/* Quick Filters Panel */}
+        <AnimatePresence>
+          {showFilters && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <div className="pt-2 pb-1 border-t border-border/50">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                  Filtros rápidos — clic para activar (se combinan con OR)
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {quickFilters.map(f => {
+                    const isActive = activeQuickFilters.has(f.id);
+                    return (
+                      <button
+                        key={f.id}
+                        onClick={() => toggleQuickFilter(f.id)}
+                        className={`
+                          inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-all
+                          ${isActive
+                            ? `${f.color} ring-2 ring-offset-1 ring-current`
+                            : `${f.color} opacity-60 hover:opacity-100`
+                          }
+                        `}
+                      >
+                        {isActive && <CheckCircle2 className="w-3 h-3" />}
+                        {f.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Active filter chips */}
+        {activeQuickFilters.size > 0 && !showFilters && (
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {quickFilters.filter(f => activeQuickFilters.has(f.id)).map(f => (
+              <span
+                key={f.id}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${f.color}`}
+              >
+                {f.label}
+                <button onClick={() => toggleQuickFilter(f.id)} className="ml-0.5 hover:opacity-70">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Table with visible scroll */}
@@ -311,6 +506,14 @@ export default function ResultsTable() {
                   Estado
                 </div>
               </th>
+              {showDespachoColumn && (
+                <th className="p-3">
+                  <div className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    <Truck className="w-3.5 h-3.5" />
+                    Despacho
+                  </div>
+                </th>
+              )}
               {showDateColumn && (
                 <th className="p-3">
                   <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -333,8 +536,9 @@ export default function ResultsTable() {
                 const docDate = formatDate(record.portalData?.documentDate);
                 const syncDate = formatDate(record.portalData?.synchronizationDate);
                 const lastSyncDate = getLastSyncDate(record.synchronization_date, record.synchronization_date2);
-                // supplierExists === false means supplier was verified and does NOT exist
                 const supplierNotExists = record.supplierExists === false;
+                const deliveryStatus = record.delivery_status || record.portalData?.deliveryStatus;
+                const deliveryBadge = getDeliveryBadge(deliveryStatus);
 
                 return (
                   <motion.tr
@@ -398,6 +602,20 @@ export default function ResultsTable() {
                         <span className="hidden sm:inline">{config.label}</span>
                       </span>
                     </td>
+                    {showDespachoColumn && (
+                      <td className="p-3">
+                        {deliveryStatus ? (
+                          <Badge
+                            variant="outline"
+                            className={`text-xs font-medium whitespace-nowrap ${deliveryBadge.className}`}
+                          >
+                            {deliveryBadge.label}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/40">—</span>
+                        )}
+                      </td>
+                    )}
                     {showDateColumn && (
                       <td className="p-3">
                         <div className="space-y-0.5">

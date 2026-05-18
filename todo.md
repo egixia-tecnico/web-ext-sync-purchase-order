@@ -667,8 +667,16 @@
 
 ## Columna "Ult. Sinc" en tabla de resultados
 
-- [ ] Verificar que synchronization_date2 se mapea desde la respuesta del API en useOCVerification
-- [ ] Agregar campo lastSyncDate en OCRecord (fecha máxima entre synchronization_date y synchronization_date2)
-- [ ] Lógica: si ambas vacías o año < 2020 → "Sin dato"; si no, mostrar la mayor de las dos
-- [ ] Agregar columna "Ult. Sinc" visible en ResultsTable
-- [ ] Verificar TypeScript y tests
+- [x] Verificar que synchronization_date2 se mapea desde la respuesta del API en useOCVerification
+- [x] Agregar campo synchronization_date2 en OCRecord
+- [x] Lógica: si ambas vacías o año < 2020 → "Sin dato"; si no, mostrar la mayor de las dos
+- [x] Agregar columna "Ult. Sinc" visible en ResultsTable
+- [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)
+
+## Columna Despacho + Filtros avanzados rápidos
+
+- [x] Columna "Despacho" en ResultsTable mostrando delivery_status con badge de color (verde=entregado, azul=parcial, ámbar=pendiente, rojo=cancelado)
+- [x] Panel de filtros avanzados rápidos: No encontradas, Sincronizadas, Con error, Proveedor no existe, Con/Sin Ult. Sinc, y filtros dinámicos por cada delivery_status único
+- [x] Chips activos visibles fuera del panel, botón Limpiar filtros
+- [x] Búsqueda extendida incluye delivery_status
+- [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)
