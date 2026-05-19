@@ -741,8 +741,8 @@ export const appRouter = router({
                     synchronizationDate2: orderData.synchronization_date2 || null,
                     manualDateSynch: orderData.manual_date_synch || null,
                     deliveryStatus: orderData.delivery_status || null,
-                    canceled: orderData.canceled || null,
-                    updated: orderData.updated || null,
+                    canceled: orderData.canceled != null ? String(orderData.canceled) : null,
+                    updated: orderData.updated != null ? String(orderData.updated) : null,
                   });
                 } else {
                   // OC not found in portal — supplier was already verified in step 2
@@ -817,8 +817,8 @@ export const appRouter = router({
           synchronizationDate: r.synchronizationDate != null ? String(r.synchronizationDate) : null,
           synchronizationDate2: (r as any).synchronizationDate2 != null ? String((r as any).synchronizationDate2) : null,
           deliveryStatus: r.deliveryStatus != null ? String(r.deliveryStatus) : null,
-          canceled: r.canceled != null ? Boolean(r.canceled) : null,
-          updated: r.updated != null ? Boolean(r.updated) : null,
+          canceled: r.canceled != null ? String(r.canceled) : null,
+          updated: r.updated != null ? String(r.updated) : null,
           error: r.error != null ? String(r.error) : null,
         }));
 
