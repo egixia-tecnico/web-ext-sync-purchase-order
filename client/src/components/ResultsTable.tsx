@@ -64,6 +64,13 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: str
     borderColor: "#dc2626",
     icon: <AlertOctagon className="w-3.5 h-3.5" />,
   },
+  canceled: {
+    label: "Anulada",
+    color: "text-purple-700",
+    bgColor: "bg-purple-50",
+    borderColor: "#7c3aed",
+    icon: <XCircle className="w-3.5 h-3.5" />,
+  },
   synced_with_error: {
     label: "Sync con error",
     color: "text-orange-600",
@@ -115,53 +122,71 @@ function formatDate(dateStr?: string): string {
 
 /**
  * Calcula la fecha de última sincronización:
- * - Toma la fecha más alta entre synchronization_date y synchronization_date2
- * - Si ambas están vacías o el año es < 2020, retorna "Sin dato"
+ * - Si manual_date_synch no viene del servicio → dato vacío ("")
+ * - Si manual_date_synch, synchronization_date y synchronization_date2 están vacíos o año ≤ 2000 → "Sin dato"
+ * - Sino: muestra la fecha más reciente de los 3 campos en formato dd/mm/aaaa hh:mm
  */
-function getLastSyncDate(date1?: string, date2?: string): string {
+function getLastSyncDate(date1?: string, date2?: string, manualDate?: string): { text: string; isEmpty: boolean } {
   const parseValidDate = (d?: string): Date | null => {
     if (!d) return null;
     if (d.startsWith("0000-00-00") || d === "0001-01-01T00:00:00") return null;
     try {
       const parsed = new Date(d);
       if (isNaN(parsed.getTime())) return null;
-      if (parsed.getFullYear() < 2020) return null;
+      if (parsed.getFullYear() <= 2000) return null;
       return parsed;
     } catch {
       return null;
     }
   };
 
+  // Si manual_date_synch no viene del servicio (undefined), retornar vacío
+  // Nota: si viene como string vacío "", se trata como campo presente pero sin valor
+  if (manualDate === undefined) {
+    // El campo no vino en la respuesta del servicio
+    // Aún así evaluamos date1 y date2
+    const d1 = parseValidDate(date1);
+    const d2 = parseValidDate(date2);
+    let best: Date | null = null;
+    if (d1 && d2) best = d1 > d2 ? d1 : d2;
+    else if (d1) best = d1;
+    else if (d2) best = d2;
+    if (!best) return { text: "", isEmpty: true };
+    return { text: formatDateDDMMYYYY(best), isEmpty: false };
+  }
+
   const d1 = parseValidDate(date1);
   const d2 = parseValidDate(date2);
+  const d3 = parseValidDate(manualDate);
 
-  let best: Date | null = null;
-  if (d1 && d2) best = d1 > d2 ? d1 : d2;
-  else if (d1) best = d1;
-  else if (d2) best = d2;
+  const dates = [d1, d2, d3].filter((d): d is Date => d !== null);
 
-  if (!best) return "Sin dato";
+  if (dates.length === 0) return { text: "Sin dato", isEmpty: true };
 
-  return best.toLocaleDateString("es-CO", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }) + " " + best.toLocaleTimeString("es-CO", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+  const best = dates.reduce((a, b) => (a > b ? a : b));
+  return { text: formatDateDDMMYYYY(best), isEmpty: false };
+}
+
+/** Formatea una fecha como dd/mm/aaaa hh:mm */
+function formatDateDDMMYYYY(d: Date): string {
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
 }
 
 /** Priority for sorting: lower = first (non-synced first) */
 const STATUS_SORT_PRIORITY: Record<string, number> = {
   error: 0,
   not_found: 1,
-  supplier_not_exists: 2,
-  synced_with_error: 3,
-  pending: 4,
-  checking: 5,
-  synced: 6,
+  canceled: 2,
+  supplier_not_exists: 3,
+  synced_with_error: 4,
+  pending: 5,
+  checking: 6,
+  synced: 7,
 };
 
 type QuickFilter = {
@@ -221,6 +246,12 @@ export default function ResultsTable() {
         color: "bg-red-50 text-red-700 border-red-300 hover:bg-red-100",
       },
       {
+        id: "canceled",
+        label: "Anuladas",
+        fn: (r) => r.status === "canceled",
+        color: "bg-purple-50 text-purple-700 border-purple-300 hover:bg-purple-100",
+      },
+      {
         id: "supplier_not_exists",
         label: "Proveedor no existe",
         fn: (r) => r.supplierExists === false,
@@ -229,13 +260,13 @@ export default function ResultsTable() {
       {
         id: "has_sync_date",
         label: "Con Ult. Sinc",
-        fn: (r) => getLastSyncDate(r.synchronization_date, r.synchronization_date2) !== "Sin dato",
+        fn: (r) => !getLastSyncDate(r.synchronization_date, r.synchronization_date2, r.manual_date_synch).isEmpty,
         color: "bg-teal-50 text-teal-700 border-teal-300 hover:bg-teal-100",
       },
       {
         id: "no_sync_date",
         label: "Sin Ult. Sinc",
-        fn: (r) => getLastSyncDate(r.synchronization_date, r.synchronization_date2) === "Sin dato",
+        fn: (r) => getLastSyncDate(r.synchronization_date, r.synchronization_date2, r.manual_date_synch).isEmpty,
         color: "bg-slate-50 text-slate-600 border-slate-300 hover:bg-slate-100",
       },
       // Dynamic delivery_status filters
@@ -535,7 +566,8 @@ export default function ResultsTable() {
                 const isSelected = selectedRecords.has(record.id);
                 const docDate = formatDate(record.portalData?.documentDate);
                 const syncDate = formatDate(record.portalData?.synchronizationDate);
-                const lastSyncDate = getLastSyncDate(record.synchronization_date, record.synchronization_date2);
+                const lastSyncResult = getLastSyncDate(record.synchronization_date, record.synchronization_date2, record.manual_date_synch);
+                const lastSyncDate = lastSyncResult.text;
                 const supplierNotExists = record.supplierExists === false;
                 const deliveryStatus = record.delivery_status || record.portalData?.deliveryStatus;
                 const deliveryBadge = getDeliveryBadge(deliveryStatus);
@@ -634,12 +666,12 @@ export default function ResultsTable() {
                           <div className="flex items-center gap-1.5 mt-1 pt-1 border-t border-border/30">
                             <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase shrink-0">Ult. Sinc</span>
                             <span className={`text-xs font-mono ${
-                              lastSyncDate === "Sin dato"
+                              lastSyncResult.isEmpty
                                 ? "text-muted-foreground/40 italic"
                                 : "text-emerald-600 font-medium"
-                            }`}>{lastSyncDate}</span>
+                            }`}>{lastSyncDate || "—"}</span>
                           </div>
-                          {!docDate && !syncDate && lastSyncDate === "Sin dato" && (
+                          {!docDate && !syncDate && lastSyncResult.isEmpty && (
                             <span className="text-xs text-muted-foreground/40">—</span>
                           )}
                         </div>

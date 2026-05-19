@@ -22,11 +22,12 @@ export interface OCRecord {
   updated?: string;
   synchronization_date?: string;
   synchronization_date2?: string;
+  manual_date_synch?: string;
   /** Result of supplier pre-check (step 2): true=exists, false=not exists, undefined=not checked */
   supplierExists?: boolean;
   /** Error message from supplier pre-check if any */
   supplierCheckError?: string;
-  status?: "pending" | "checking" | "synced" | "not_found" | "supplier_not_exists" | "error" | "synced_with_error";
+  status?: "pending" | "checking" | "synced" | "not_found" | "supplier_not_exists" | "canceled" | "error" | "synced_with_error";
   statusMessage?: string;
   provider_exists?: boolean;
   provider_id?: string;
@@ -46,6 +47,7 @@ export interface KPIData {
   total: number;
   synced: number;
   notFound: number;
+  canceled: number;
   supplierNotExists: number;
   error: number;
   syncedWithError: number;
@@ -161,6 +163,7 @@ export function OCSyncProvider({ children }: { children: ReactNode }) {
     total: records.length,
     synced: records.filter(r => r.status === "synced").length,
     notFound: records.filter(r => r.status === "not_found").length,
+    canceled: records.filter(r => r.status === "canceled").length,
     supplierNotExists: records.filter(r => r.status === "supplier_not_exists").length,
     error: records.filter(r => r.status === "error").length,
     syncedWithError: records.filter(r => r.status === "synced_with_error").length,

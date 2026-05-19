@@ -8,7 +8,7 @@ import { useOCSync } from "@/contexts/OCSyncContext";
 import { useThemeColor } from "@/contexts/ThemeColorContext";
 import {
   Package, CheckCircle2, XCircle, UserX, AlertTriangle,
-  Clock, Loader2, AlertOctagon
+  Clock, Loader2, AlertOctagon, Ban
 } from "lucide-react";
 
 interface KPICardProps {
@@ -135,6 +135,17 @@ export default function KPIDashboard() {
       onClick: () => handleKPIClick("not_found"),
     },
     {
+      label: "Anuladas",
+      value: kpi.canceled,
+      total: kpi.total,
+      color: "#7c3aed",
+      bgColor: "#f5f3ff",
+      icon: <Ban className="w-4 h-4 text-purple-600" />,
+      isActive: activeKPIFilter === "canceled",
+      filterKey: "canceled",
+      onClick: () => handleKPIClick("canceled"),
+    },
+    {
       label: "Proveedor no existe",
       value: kpi.supplierNotExists,
       total: kpi.total,
@@ -160,7 +171,7 @@ export default function KPIDashboard() {
 
   // Only show cards that have values or are important
   const visibleCards = cards.filter(c =>
-    c.value > 0 || ["Total OC", "Sincronizadas", "No encontradas", "Proveedor no existe"].includes(c.label)
+    c.value > 0 || ["Total OC", "Sincronizadas", "No encontradas", "Anuladas", "Proveedor no existe"].includes(c.label)
   );
 
   return (
@@ -169,7 +180,7 @@ export default function KPIDashboard() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
     >
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {visibleCards.map((card, i) => (
           <KPICard key={card.label} {...card} delay={i * 0.08} />
         ))}

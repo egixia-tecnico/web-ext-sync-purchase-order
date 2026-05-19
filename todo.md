@@ -703,3 +703,13 @@
 - [x] SupplierCheckPanel: mismo layout (Reverificar/Descargar izquierda, Continuar derecha)
 - [x] Backend: cambiar verifyPurchaseOrders de GET con query params a POST con body JSON
 - [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)
+
+## Ult. Sinc con manual_date_synch + Estado Anulada + Reportes completos
+
+- [x] Backend: mapear campo manual_date_synch de la respuesta API al OCRecord
+- [x] Frontend: agregar manual_date_synch al tipo OCRecord en OCSyncContext
+- [x] Lógica Ult. Sinc: si manual_date_synch no viene → dato vacío; si los 3 campos vacíos o año ≤ 2000 → "Sin dato"; sino mostrar la fecha más reciente en formato dd/mm/aaaa hh:mm
+- [x] Estado Anulada: si canceled tiene valor → estado "Anulada" en vez de "Sincronizada"
+- [x] KPI Anuladas: nuevo indicador antes de "Proveedor no existe" con conteo de OCs anuladas
+- [x] Reportes CSV: asegurar que cada paso exporte exactamente las columnas visibles del grid completas
+- [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)

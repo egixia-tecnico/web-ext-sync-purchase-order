@@ -149,20 +149,42 @@ export function useOCVerification() {
             continue;
           }
 
+          // Determine if the OC is canceled (canceled field has a truthy value)
+          const isCanceled = apiResult.status === "found" && apiResult.canceled && String(apiResult.canceled).trim() !== "" && String(apiResult.canceled).trim() !== "0" && String(apiResult.canceled).toLowerCase() !== "false";
+
+          let resolvedStatus: OCRecord["status"];
+          let resolvedMessage: string;
+          if (apiResult.status === "found") {
+            if (isCanceled) {
+              resolvedStatus = "canceled";
+              resolvedMessage = "Anulada";
+            } else {
+              resolvedStatus = "synced";
+              resolvedMessage = `Sincronizada (${apiResult.syncStatus})`;
+            }
+          } else if (apiResult.status === "not_found") {
+            resolvedStatus = "not_found";
+            resolvedMessage = "OC no encontrada";
+          } else if (apiResult.status === "supplier_not_exists") {
+            resolvedStatus = "supplier_not_exists";
+            resolvedMessage = "Proveedor no existe";
+          } else {
+            resolvedStatus = "error";
+            resolvedMessage = apiResult.error || "Error";
+          }
+
           batchUpdates.push({
             id: target.id,
             updates: {
-              status: apiResult.status === "found" ? "synced"
-                : apiResult.status === "not_found" ? "not_found"
-                : apiResult.status === "supplier_not_exists" ? "supplier_not_exists"
-                : "error",
-              statusMessage: apiResult.error || (apiResult.status === "found" ? `Sincronizada (${apiResult.syncStatus})` : apiResult.status === "not_found" ? "OC no encontrada" : apiResult.status === "supplier_not_exists" ? "Proveedor no existe" : "Error"),
+              status: resolvedStatus,
+              statusMessage: resolvedMessage,
               ...(apiResult.status === "found" ? {
                 buyer_name: apiResult.buyerName || target.buyer_name,
                 provider_name: apiResult.providerName || target.provider_name,
                 document_date: apiResult.documentDate || undefined,
                 synchronization_date: apiResult.synchronizationDate || undefined,
                 synchronization_date2: (apiResult as any).synchronizationDate2 || undefined,
+                manual_date_synch: (apiResult as any).manualDateSynch || undefined,
                 delivery_status: apiResult.deliveryStatus || undefined,
                 canceled: apiResult.canceled != null ? String(apiResult.canceled) : undefined,
                 updated: apiResult.updated != null ? String(apiResult.updated) : undefined,

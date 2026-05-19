@@ -739,6 +739,7 @@ export const appRouter = router({
                     documentDate: orderData.document_date || null,
                     synchronizationDate: orderData.synchronization_date || null,
                     synchronizationDate2: orderData.synchronization_date2 || null,
+                    manualDateSynch: orderData.manual_date_synch || null,
                     deliveryStatus: orderData.delivery_status || null,
                     canceled: orderData.canceled || null,
                     updated: orderData.updated || null,

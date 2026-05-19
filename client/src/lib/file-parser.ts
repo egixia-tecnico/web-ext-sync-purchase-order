@@ -184,16 +184,65 @@ function formatDateForExport(dateStr?: string): string {
   }
 }
 
+/**
+ * Calcula la fecha de última sincronización para exportación.
+ * Misma lógica que ResultsTable: usa los 3 campos y retorna la más reciente en dd/mm/aaaa hh:mm.
+ */
+function getLastSyncDateForExport(date1?: string, date2?: string, manualDate?: string): string {
+  const parseValidDate = (d?: string): Date | null => {
+    if (!d) return null;
+    if (d.startsWith("0000-00-00") || d === "0001-01-01T00:00:00") return null;
+    try {
+      const parsed = new Date(d);
+      if (isNaN(parsed.getTime())) return null;
+      if (parsed.getFullYear() <= 2000) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
+
+  if (manualDate === undefined) {
+    const d1 = parseValidDate(date1);
+    const d2 = parseValidDate(date2);
+    let best: Date | null = null;
+    if (d1 && d2) best = d1 > d2 ? d1 : d2;
+    else if (d1) best = d1;
+    else if (d2) best = d2;
+    if (!best) return "";
+    return formatDateDDMMYYYYExport(best);
+  }
+
+  const d1 = parseValidDate(date1);
+  const d2 = parseValidDate(date2);
+  const d3 = parseValidDate(manualDate);
+  const dates = [d1, d2, d3].filter((d): d is Date => d !== null);
+  if (dates.length === 0) return "Sin dato";
+  const best = dates.reduce((a, b) => (a > b ? a : b));
+  return formatDateDDMMYYYYExport(best);
+}
+
+function formatDateDDMMYYYYExport(d: Date): string {
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
+}
+
 export function exportToCSV(records: OCRecord[]): string {
   const headers = [
-    "Cod. Comprador",
-    "Cod. Proveedor",
     "Nro. Orden Compra",
-    "Estado",
+    "Cod. Comprador",
     "Nombre Comprador",
+    "Cod. Proveedor 1",
+    "Cod. Proveedor 2",
     "Nombre Proveedor",
+    "Estado",
+    "Despacho",
     "Fecha Documento",
-    "Fecha Sincronización",
+    "Ult. Sincronización",
     "Proveedor Existe",
     "Detalle",
   ];
@@ -203,21 +252,24 @@ export function exportToCSV(records: OCRecord[]): string {
     checking: "Verificando",
     synced: "Sincronizada",
     not_found: "No encontrada",
+    canceled: "Anulada",
     supplier_not_exists: "Proveedor no existe",
     error: "Error",
     synced_with_error: "Sincronizada con error",
   };
 
   const rows = records.map(r => [
-    r.buyer_external_code,
-    r.provider_external_code,
     r.purchase_order_number,
-    statusLabels[r.status || "pending"] || r.status,
+    r.buyer_external_code,
     r.buyer_name || "",
+    r.provider_external_code_1 || r.provider_external_code || "",
+    r.provider_external_code_2 || "",
     r.provider_name || "",
-    formatDateForExport(r.portalData?.documentDate),
-    formatDateForExport(r.portalData?.synchronizationDate),
-    r.provider_exists === undefined ? "" : r.provider_exists ? "Sí" : "No",
+    statusLabels[r.status || "pending"] || r.status || "",
+    r.delivery_status || r.portalData?.deliveryStatus || "",
+    formatDateForExport(r.document_date || r.portalData?.documentDate),
+    getLastSyncDateForExport(r.synchronization_date, r.synchronization_date2, r.manual_date_synch),
+    r.supplierExists === undefined ? "" : r.supplierExists ? "Sí" : "No",
     r.statusMessage || "",
   ]);
 
