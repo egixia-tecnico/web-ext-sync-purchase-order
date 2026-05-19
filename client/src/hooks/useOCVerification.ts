@@ -24,6 +24,10 @@ import { toast } from "sonner";
 // Helper to wait N milliseconds
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Parallel execution config for OC verification
+const OC_PARALLEL_GROUP_SIZE = 4;  // Max concurrent API calls per group
+const OC_GROUP_DELAY_MS = 2000;    // Delay between groups (ms)
+
 export function useOCVerification() {
   const { records, updateRecord, updateRecordsBatch, setIsProcessing, setProgress, selectedRecords } = useOCSync();
   const { clientKey } = useClientKey();
@@ -96,11 +100,26 @@ export function useOCVerification() {
     let processedCount = 0;
     let wasCancelled = false;
 
-    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+    // Build individual batches
+    const allBatches: OCRecord[][] = [];
+    for (let i = 0; i < targets.length; i += batchSize) {
+      allBatches.push(targets.slice(i, i + batchSize));
+    }
+
+    // Group batches into parallel groups of OC_PARALLEL_GROUP_SIZE
+    const parallelGroups: OCRecord[][][] = [];
+    for (let i = 0; i < allBatches.length; i += OC_PARALLEL_GROUP_SIZE) {
+      parallelGroups.push(allBatches.slice(i, i + OC_PARALLEL_GROUP_SIZE));
+    }
+
+    const totalGroups = parallelGroups.length;
+
+    for (let groupIdx = 0; groupIdx < totalGroups; groupIdx++) {
       if (cancelRef.current) {
         wasCancelled = true;
         // Mark remaining unprocessed records back to "pending"
-        const remainingTargets = targets.slice(batchIndex * batchSize);
+        const processedSoFar = groupIdx * OC_PARALLEL_GROUP_SIZE * batchSize;
+        const remainingTargets = targets.slice(processedSoFar);
         const pendingUpdates = remainingTargets.map(r => ({
           id: r.id,
           updates: { status: "pending" as const, statusMessage: "Cancelado por el usuario" }
@@ -109,125 +128,164 @@ export function useOCVerification() {
         break;
       }
 
-      const batchStart = batchIndex * batchSize;
-      const batchEnd = Math.min(batchStart + batchSize, targets.length);
-      const batchTargets = targets.slice(batchStart, batchEnd);
+      const group = parallelGroups[groupIdx];
 
-      // Update status for this batch's records
-      const batchCheckingUpdates = batchTargets.map(r => ({
+      // Mark all records in this group as checking
+      const groupCheckingUpdates = group.flat().map(r => ({
         id: r.id,
-        updates: { statusMessage: `Verificando... (lote ${batchIndex + 1} de ${totalBatches})` }
+        updates: { statusMessage: `Verificando... (grupo ${groupIdx + 1} de ${totalGroups})` }
       }));
-      updateRecordsBatch(batchCheckingUpdates);
+      updateRecordsBatch(groupCheckingUpdates);
 
-      try {
-        const result = await verifyBatchMutation.mutateAsync({
-          orders: batchTargets.map(r => ({
-            purchaseOrderId: r.purchase_order_number,
-            providerExternalCode1: r.provider_external_code_1 || r.provider_external_code || "",
-            providerExternalCode2: r.provider_external_code_2 || "",
-            buyerCode: r.buyer_external_code,
-          })),
-          clientKey: clientKey || undefined,
-          isFirstBatch: batchIndex === 0,
-          isLastBatch: batchIndex === totalBatches - 1,
-          globalSummary: batchIndex === totalBatches - 1 ? globalSummary : undefined,
-        });
+      // Helper to process a single batch and return updates + summary delta
+      const processBatch = async (batchTargets: OCRecord[], batchLabel: string) => {
+        try {
+          const result = await verifyBatchMutation.mutateAsync({
+            orders: batchTargets.map(r => ({
+              purchaseOrderId: r.purchase_order_number,
+              providerExternalCode1: r.provider_external_code_1 || r.provider_external_code || "",
+              providerExternalCode2: r.provider_external_code_2 || "",
+              buyerCode: r.buyer_external_code,
+            })),
+            clientKey: clientKey || undefined,
+            isFirstBatch: groupIdx === 0,
+            isLastBatch: groupIdx === totalGroups - 1,
+            globalSummary: groupIdx === totalGroups - 1 ? globalSummary : undefined,
+          });
 
-        // Map results back to records for this batch
-        const batchUpdates: Array<{ id: string; updates: Partial<OCRecord> }> = [];
+          const batchUpdates: Array<{ id: string; updates: Partial<OCRecord> }> = [];
+          const summaryDelta = { total: 0, found: 0, not_found: 0, supplier_not_exists: 0, errors: 0 };
 
-        for (let i = 0; i < batchTargets.length; i++) {
-          const target = batchTargets[i];
-          const apiResult = result.results[i];
+          for (let i = 0; i < batchTargets.length; i++) {
+            const target = batchTargets[i];
+            const apiResult = result.results[i];
 
-          if (!apiResult) {
+            if (!apiResult) {
+              batchUpdates.push({ id: target.id, updates: { status: "error", statusMessage: "Sin resultado del servidor" } });
+              summaryDelta.errors++;
+              summaryDelta.total++;
+              continue;
+            }
+
+            const canceledStr = apiResult.canceled != null ? String(apiResult.canceled).trim().toUpperCase() : "";
+            const isCanceled = apiResult.status === "found"
+              && canceledStr !== ""
+              && canceledStr !== "NO"
+              && canceledStr !== "0"
+              && canceledStr !== "FALSE";
+
+            let resolvedStatus: OCRecord["status"];
+            let resolvedMessage: string;
+            if (apiResult.status === "found") {
+              if (isCanceled) {
+                resolvedStatus = "canceled";
+                resolvedMessage = "Anulada";
+              } else {
+                resolvedStatus = "synced";
+                resolvedMessage = `Sincronizada (${apiResult.syncStatus})`;
+              }
+              summaryDelta.found++;
+            } else if (apiResult.status === "not_found") {
+              resolvedStatus = "not_found";
+              resolvedMessage = "OC no encontrada";
+              summaryDelta.not_found++;
+            } else if (apiResult.status === "supplier_not_exists") {
+              resolvedStatus = "supplier_not_exists";
+              resolvedMessage = "Proveedor no existe";
+              summaryDelta.supplier_not_exists++;
+            } else {
+              resolvedStatus = "error";
+              resolvedMessage = apiResult.error || "Error";
+              summaryDelta.errors++;
+            }
+            summaryDelta.total++;
+
             batchUpdates.push({
               id: target.id,
-              updates: { status: "error", statusMessage: "Sin resultado del servidor" },
+              updates: {
+                status: resolvedStatus,
+                statusMessage: resolvedMessage,
+                ...(apiResult.status === "found" ? {
+                  buyer_name: apiResult.buyerName || target.buyer_name,
+                  provider_name: apiResult.providerName || target.provider_name,
+                  document_date: apiResult.documentDate || undefined,
+                  synchronization_date: apiResult.synchronizationDate || undefined,
+                  synchronization_date2: (apiResult as any).synchronizationDate2 || undefined,
+                  manual_date_synch: (apiResult as any).manualDateSynch || undefined,
+                  delivery_status: apiResult.deliveryStatus || undefined,
+                  canceled: apiResult.canceled != null ? String(apiResult.canceled) : undefined,
+                  updated: apiResult.updated != null ? String(apiResult.updated) : undefined,
+                  portalData: {
+                    buyerName: apiResult.buyerName || "",
+                    providerCode: apiResult.providerExternalCode1 || "",
+                    providerName: apiResult.providerName || "",
+                    documentDate: apiResult.documentDate || "",
+                    deliveryStatus: apiResult.deliveryStatus || "",
+                    canceled: apiResult.canceled != null ? String(apiResult.canceled) : "",
+                    updated: apiResult.updated != null ? String(apiResult.updated) : "",
+                    synchronizationDate: apiResult.synchronizationDate || "",
+                  },
+                } : {}),
+              },
             });
-            continue;
           }
 
-          // Determine if the OC is canceled.
-          // Only mark as canceled if the field has a meaningful truthy value.
-          // Values "NO", "", null, undefined, "0", "false" → NOT canceled (synced).
-          const canceledStr = apiResult.canceled != null ? String(apiResult.canceled).trim().toUpperCase() : "";
-          const isCanceled = apiResult.status === "found"
-            && canceledStr !== ""
-            && canceledStr !== "NO"
-            && canceledStr !== "0"
-            && canceledStr !== "FALSE";
-
-          let resolvedStatus: OCRecord["status"];
-          let resolvedMessage: string;
-          if (apiResult.status === "found") {
-            if (isCanceled) {
-              resolvedStatus = "canceled";
-              resolvedMessage = "Anulada";
-            } else {
-              resolvedStatus = "synced";
-              resolvedMessage = `Sincronizada (${apiResult.syncStatus})`;
-            }
-          } else if (apiResult.status === "not_found") {
-            resolvedStatus = "not_found";
-            resolvedMessage = "OC no encontrada";
-          } else if (apiResult.status === "supplier_not_exists") {
-            resolvedStatus = "supplier_not_exists";
-            resolvedMessage = "Proveedor no existe";
-          } else {
-            resolvedStatus = "error";
-            resolvedMessage = apiResult.error || "Error";
+          // Accumulate summary from API response
+          if (result.summary) {
+            summaryDelta.total = result.summary.total;
+            summaryDelta.found = result.summary.found;
+            summaryDelta.not_found = result.summary.not_found;
+            summaryDelta.supplier_not_exists = result.summary.supplier_not_exists;
+            summaryDelta.errors = result.summary.errors;
           }
 
-          batchUpdates.push({
-            id: target.id,
-            updates: {
-              status: resolvedStatus,
-              statusMessage: resolvedMessage,
-              ...(apiResult.status === "found" ? {
-                buyer_name: apiResult.buyerName || target.buyer_name,
-                provider_name: apiResult.providerName || target.provider_name,
-                document_date: apiResult.documentDate || undefined,
-                synchronization_date: apiResult.synchronizationDate || undefined,
-                synchronization_date2: (apiResult as any).synchronizationDate2 || undefined,
-                manual_date_synch: (apiResult as any).manualDateSynch || undefined,
-                delivery_status: apiResult.deliveryStatus || undefined,
-                canceled: apiResult.canceled != null ? String(apiResult.canceled) : undefined,
-                updated: apiResult.updated != null ? String(apiResult.updated) : undefined,
-                portalData: {
-                  buyerName: apiResult.buyerName || "",
-                  providerCode: apiResult.providerExternalCode1 || "",
-                  providerName: apiResult.providerName || "",
-                  documentDate: apiResult.documentDate || "",
-                  deliveryStatus: apiResult.deliveryStatus || "",
-                  canceled: apiResult.canceled != null ? String(apiResult.canceled) : "",
-                  updated: apiResult.updated != null ? String(apiResult.updated) : "",
-                  synchronizationDate: apiResult.synchronizationDate || "",
-                },
-              } : {}),
-            },
-          });
+          return { updates: batchUpdates, summaryDelta, count: batchTargets.length, error: null };
+        } catch (err: any) {
+          const errorMsg = err?.message || "Error desconocido";
+          // Propagate critical errors immediately
+          if (
+            errorMsg.includes("COMMUNICATION_FAILURE_TOKEN") ||
+            errorMsg.includes("COMMUNICATION_FAILURE_SERVICE") ||
+            errorMsg.includes("NO_CONNECTION_503")
+          ) {
+            throw err;
+          }
+          const errorUpdates = batchTargets.map(r => ({
+            id: r.id,
+            updates: { status: "error" as const, statusMessage: `Error ${batchLabel}: ${errorMsg}` },
+          }));
+          toast.error(`Error en ${batchLabel}: ${errorMsg}`, { position: "bottom-left", duration: 5000 });
+          return {
+            updates: errorUpdates,
+            summaryDelta: { total: batchTargets.length, found: 0, not_found: 0, supplier_not_exists: 0, errors: batchTargets.length },
+            count: batchTargets.length,
+            error: errorMsg,
+          };
         }
+      };
 
-        updateRecordsBatch(batchUpdates);
+      try {
+        // Run all batches in this group in parallel
+        const groupResults = await Promise.all(
+          group.map((batchTargets, bIdx) =>
+            processBatch(batchTargets, `lote ${groupIdx * OC_PARALLEL_GROUP_SIZE + bIdx + 1} de ${totalBatches}`)
+          )
+        );
 
-        // Accumulate summary
-        if (result.summary) {
-          globalSummary.total += result.summary.total;
-          globalSummary.found += result.summary.found;
-          globalSummary.not_found += result.summary.not_found;
-          globalSummary.supplier_not_exists += result.summary.supplier_not_exists;
-          globalSummary.errors += result.summary.errors;
+        // Apply all updates and accumulate summaries
+        for (const res of groupResults) {
+          updateRecordsBatch(res.updates);
+          globalSummary.total += res.summaryDelta.total;
+          globalSummary.found += res.summaryDelta.found;
+          globalSummary.not_found += res.summaryDelta.not_found;
+          globalSummary.supplier_not_exists += res.summaryDelta.supplier_not_exists;
+          globalSummary.errors += res.summaryDelta.errors;
+          processedCount += res.count;
         }
-
-        processedCount += batchTargets.length;
         setProgress({ current: processedCount, total: targets.length });
 
       } catch (err: any) {
         const errorMsg = err?.message || "Error desconocido";
-
-        // Handle communication failure alerts
         if (errorMsg.includes("COMMUNICATION_FAILURE_TOKEN")) {
           (window as any).__showCommFailure?.("token");
           setIsProcessing(false);
@@ -244,34 +302,15 @@ export function useOCVerification() {
           setIsCancelling(false);
           return;
         }
-
-        // Mark this batch's records as error
-        const errorUpdates = batchTargets.map(r => ({
-          id: r.id,
-          updates: { status: "error" as const, statusMessage: `Error lote ${batchIndex + 1}: ${errorMsg}` },
-        }));
-        updateRecordsBatch(errorUpdates);
-
-        globalSummary.errors += batchTargets.length;
-        globalSummary.total += batchTargets.length;
-        processedCount += batchTargets.length;
-        setProgress({ current: processedCount, total: targets.length });
-
-        // Show error but continue with next batch
-        toast.error(
-          `Error en lote ${batchIndex + 1} de ${totalBatches}: ${errorMsg}`,
-          { position: "bottom-left", duration: 5000 }
-        );
       }
 
-      // Wait between batches (except after the last batch)
-      if (batchIndex < totalBatches - 1 && !cancelRef.current) {
-        // Show waiting toast
+      // Wait OC_GROUP_DELAY_MS between groups (skip after last group)
+      if (groupIdx < totalGroups - 1 && !cancelRef.current) {
         toast.info(
-          `Esperando ${batchDelaySeconds}s antes del lote ${batchIndex + 2} de ${totalBatches}...`,
-          { position: "bottom-left", duration: batchDelaySeconds * 1000 }
+          `Esperando ${OC_GROUP_DELAY_MS / 1000}s antes del grupo ${groupIdx + 2} de ${totalGroups}...`,
+          { position: "bottom-left", duration: OC_GROUP_DELAY_MS }
         );
-        await delay(batchDelaySeconds * 1000);
+        await delay(OC_GROUP_DELAY_MS);
       }
     }
 
