@@ -650,30 +650,25 @@ export default function ResultsTable() {
                     )}
                     {showDateColumn && (
                       <td className="p-3">
-                        <div className="space-y-0.5">
-                          {docDate && (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] text-muted-foreground/60 uppercase w-8 shrink-0">Doc</span>
-                              <span className="text-xs text-muted-foreground font-mono">{docDate}</span>
-                            </div>
-                          )}
-                          {syncDate && (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] text-muted-foreground/60 uppercase w-8 shrink-0">Sync</span>
-                              <span className="text-xs text-muted-foreground font-mono">{syncDate}</span>
-                            </div>
-                          )}
-                          <div className="flex items-center gap-1.5 mt-1 pt-1 border-t border-border/30">
-                            <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase shrink-0">Ult. Sinc</span>
+                        <div className="space-y-1">
+                          {/* Fecha del documento */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-muted-foreground/60 uppercase shrink-0 w-8">Doc</span>
+                            <span className="text-xs text-muted-foreground font-mono">
+                              {docDate || <span className="text-muted-foreground/30 italic">Sin dato</span>}
+                            </span>
+                          </div>
+                          {/* Última sincronización */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase shrink-0 w-8">Sinc</span>
                             <span className={`text-xs font-mono ${
                               lastSyncResult.isEmpty
-                                ? "text-muted-foreground/40 italic"
+                                ? "text-muted-foreground/30 italic"
                                 : "text-emerald-600 font-medium"
-                            }`}>{lastSyncDate || "—"}</span>
+                            }`}>
+                              {lastSyncDate || <span className="text-muted-foreground/30 italic">Sin dato</span>}
+                            </span>
                           </div>
-                          {!docDate && !syncDate && lastSyncResult.isEmpty && (
-                            <span className="text-xs text-muted-foreground/40">—</span>
-                          )}
                         </div>
                       </td>
                     )}
