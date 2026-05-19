@@ -205,25 +205,56 @@ export default function SupplierCheckPanel() {
   const handleExportProviders = () => {
     const now = new Date();
     const dateStr = `${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, "0")}_${String(now.getDate()).padStart(2, "0")}`;
-    // Build a summary CSV of unique suppliers with their status
-    const supplierRows = records.reduce<{ id: string; provider_external_code_1: string; provider_external_code_2: string; supplierExists: string; supplierCheckError: string }[]>((acc, rec) => {
-      const code1 = rec.provider_external_code_1 || rec.provider_external_code || "";
-      const code2 = rec.provider_external_code_2 || "";
-      const key = `${code1}|${code2}`;
-      if (!acc.find(r => r.id === key)) {
-        acc.push({
-          id: key,
-          provider_external_code_1: code1,
-          provider_external_code_2: code2,
-          supplierExists: rec.supplierExists === true ? "Existe" : rec.supplierExists === false ? "No existe" : "Sin verificar",
-          supplierCheckError: rec.supplierCheckError || "",
-        });
+
+    // Export ALL records (not just unique suppliers) with full columns
+    const headers = [
+      "Nro. Orden Compra",
+      "Cod. Comprador",
+      "Nombre Comprador",
+      "Cod. Proveedor 1",
+      "Cod. Proveedor 2",
+      "Nombre Proveedor",
+      "Resultado Verificaci\u00f3n Proveedor",
+      "Error",
+    ];
+
+    const rows = records.map(rec => {
+      let resultado: string;
+      if (rec.supplierExists === true) {
+        resultado = "Existe";
+      } else if (rec.supplierExists === false && rec.supplierCheckError) {
+        resultado = "Error";
+      } else if (rec.supplierExists === false) {
+        resultado = "No existe";
+      } else {
+        resultado = "Sin verificar";
       }
-      return acc;
-    }, []);
-    // Use downloadCSV with a compatible shape
-    downloadCSV(supplierRows as any, `reporte_proveedores_${dateStr}.csv`);
-    toast.success(`${supplierRows.length} proveedores exportados`, { position: "bottom-left" });
+
+      return [
+        rec.purchase_order_number || "",
+        rec.buyer_external_code || "",
+        rec.buyer_name || "",
+        rec.provider_external_code_1 || rec.provider_external_code || "",
+        rec.provider_external_code_2 || "",
+        rec.provider_name || "",
+        resultado,
+        rec.supplierCheckError || "",
+      ];
+    });
+
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `reporte_verificacion_proveedores_${dateStr}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+
+    toast.success(`${records.length} registros exportados`, { position: "bottom-left" });
   };
 
   const progressPercent = progress.total > 0
