@@ -131,18 +131,26 @@ export default function SupplierCheckPanel() {
     }
 
     // Update each record with supplier check result
+    // If the supplier does not exist → assign status 'supplier_not_exists' so the KPI counts it
     const batchUpdates = records.map(rec => {
       const code1 = rec.provider_external_code_1 || rec.provider_external_code || "";
       const code2 = rec.provider_external_code_2 || "";
       const key = `${code1}|${code2}`;
       const res = resultMap.get(key);
-      return {
-        id: rec.id,
-        updates: {
-          supplierExists: res ? res.exists : undefined,
-          supplierCheckError: res?.error,
-        },
+
+      const supplierExists = res ? res.exists : undefined;
+      const statusUpdate: Partial<typeof rec> = {
+        supplierExists,
+        supplierCheckError: res?.error,
       };
+
+      // Only override status when supplier definitively does not exist (no API error)
+      if (supplierExists === false && !res?.error) {
+        statusUpdate.status = "supplier_not_exists";
+        statusUpdate.statusMessage = "Proveedor no existe";
+      }
+
+      return { id: rec.id, updates: statusUpdate };
     });
 
     updateRecordsBatch(batchUpdates);
