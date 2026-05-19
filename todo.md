@@ -696,3 +696,10 @@
 - [ ] Frontend: llamar testToken antes de verificación de proveedores, verificación de OCs y sincronización
 - [ ] Si testToken falla → mostrar modal bloqueante inmediatamente, no continuar con la operación
 - [ ] Verificar TypeScript y tests
+
+## Layout botones wizard + POST verificación OCs
+
+- [x] ActionBar: Continuar/Siguiente siempre a la derecha, Descargar/Volver siempre a la izquierda
+- [x] SupplierCheckPanel: mismo layout (Reverificar/Descargar izquierda, Continuar derecha)
+- [x] Backend: cambiar verifyPurchaseOrders de GET con query params a POST con body JSON
+- [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)

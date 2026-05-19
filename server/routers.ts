@@ -698,18 +698,19 @@ export const appRouter = router({
 
         // Step 2: For each sociedad, split into sub-batches of OC_BATCH_SIZE and query the API
         for (const [buyerCode, buyerOrders] of Array.from(byBuyer.entries())) {
-          // Split into sub-batches of up to 50 OCs
+          // Split into sub-batches of up to 40 OCs
           for (let i = 0; i < buyerOrders.length; i += OC_BATCH_SIZE) {
             const subBatch = buyerOrders.slice(i, i + OC_BATCH_SIZE);
 
-            // Build URL with repeated purchase_order_number_array params
-            const arrayParams = subBatch
-              .map((o: { purchaseOrderId: string; providerExternalCode1: string; providerExternalCode2?: string; buyerCode?: string }) => `purchase_order_number_array=${encodeURIComponent(o.purchaseOrderId.trim())}`)
-              .join("&");
-            const url = `/apimanager/purchase_order_v1/list?buyer_external_code=${encodeURIComponent(buyerCode)}&${arrayParams}`;
+            // POST body: { buyer_external_code, purchase_order_number_array: string[] }
+            const url = `/apimanager/purchase_order_v1/list`;
+            const body = {
+              buyer_external_code: buyerCode,
+              purchase_order_number_array: subBatch.map((o: { purchaseOrderId: string }) => o.purchaseOrderId.trim()),
+            };
 
             try {
-              const data = await callEgixiaApi(url, "GET", undefined, input.clientKey);
+              const data = await callEgixiaApi(url, "POST", body, input.clientKey);
 
               // Build a lookup map from the API response: purchaseOrderNumber -> orderData
               const foundMap = new Map<string, any>();

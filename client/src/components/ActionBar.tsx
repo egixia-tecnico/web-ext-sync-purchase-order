@@ -305,33 +305,10 @@ export default function ActionBar() {
           )}
         </AnimatePresence>
 
-        {/* Step 3: Verificar OCs */}
+        {/* Step 3: Verificar OCs — izquierda: Descargar + Volver | derecha: Verificar */}
         {currentStep === 3 && (
           <div className="flex flex-wrap items-center gap-3">
-            <Button
-              onClick={handleVerify}
-              disabled={isProcessing || pendingCount === 0}
-              className="gap-2 text-white"
-              style={{ backgroundColor: `rgb(${r}, ${g}, ${b})` }}
-            >
-              {isProcessing ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Search className="w-4 h-4" />
-              )}
-              Verificar pendientes ({eligibleForVerification.filter(r => r.status === "pending" || !r.status).length})
-            </Button>
-
-            {excludedBySupplier > 0 && !isProcessing && (
-              <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                <AlertTriangle className="w-3.5 h-3.5" />
-                {excludedBySupplier} OC excluidas (proveedor no existe)
-              </span>
-            )}
-
-            <div className="flex-1" />
-
-            {/* Descarga del reporte parcial de verificación */}
+            {/* LEFT: Descargar + Volver */}
             <Button
               variant="outline"
               size="sm"
@@ -354,12 +331,38 @@ export default function ActionBar() {
                 Volver a proveedores
               </Button>
             )}
+
+            {excludedBySupplier > 0 && !isProcessing && (
+              <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                {excludedBySupplier} OC excluidas (proveedor no existe)
+              </span>
+            )}
+
+            {/* SPACER */}
+            <div className="flex-1" />
+
+            {/* RIGHT: Verificar */}
+            <Button
+              onClick={handleVerify}
+              disabled={isProcessing || pendingCount === 0}
+              className="gap-2 text-white"
+              style={{ backgroundColor: `rgb(${r}, ${g}, ${b})` }}
+            >
+              {isProcessing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Search className="w-4 h-4" />
+              )}
+              Verificar pendientes ({eligibleForVerification.filter(r => r.status === "pending" || !r.status).length})
+            </Button>
           </div>
         )}
 
-        {/* Step 4: Resultados - Exportar + Sincronizar X de Y */}
+        {/* Step 4: Resultados — izquierda: Volver + Descargar | derecha: Sincronizar */}
         {currentStep === 4 && (
           <div className="flex flex-wrap items-center gap-3">
+            {/* LEFT: Volver + Descargar */}
             <Button
               variant="outline"
               size="sm"
@@ -370,7 +373,6 @@ export default function ActionBar() {
               Anterior
             </Button>
 
-            {/* Descarga del reporte de resultados */}
             <Button
               onClick={() => handleExportStep(4)}
               disabled={isProcessing}
@@ -382,8 +384,10 @@ export default function ActionBar() {
               Descargar reporte ({totalCount})
             </Button>
 
+            {/* SPACER */}
             <div className="flex-1" />
 
+            {/* RIGHT: Sincronizar */}
             <span className="text-xs text-muted-foreground">
               {selectedCount} de {totalCount} seleccionados
             </span>
@@ -417,20 +421,24 @@ export default function ActionBar() {
           </div>
         )}
 
-        {/* Step 6: Finalizado - reporte final */}
+        {/* Step 6: Finalizado — izquierda: Descargar | derecha: resumen */}
         {currentStep === 6 && (
           <div className="flex flex-wrap items-center gap-3">
+            {/* LEFT: Descargar */}
             <Button
               onClick={() => handleExportStep(6)}
-              className="gap-2 text-white"
-              style={{ backgroundColor: `rgb(${r}, ${g}, ${b})` }}
+              variant="outline"
+              size="sm"
+              className="gap-2"
             >
               <Download className="w-4 h-4" />
               Descargar reporte final ({totalCount})
             </Button>
 
+            {/* SPACER */}
             <div className="flex-1" />
 
+            {/* RIGHT: resumen */}
             <span className="text-xs text-muted-foreground">
               Sincronización completada · {totalCount} registros
             </span>
