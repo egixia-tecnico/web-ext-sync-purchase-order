@@ -261,9 +261,8 @@ export async function saveIntegrationLog(data: {
       executionTimeMs: data.executionTimeMs ?? null,
     });
 
-    // Clean old logs - keep last 20 per status (success/error/timeout) = 60 max
-    await cleanOldIntegrationLogs(data.clientId);
-    
+    // No se limpian logs automáticamente.
+    // Los logs solo se eliminan cuando el usuario carga un nuevo archivo (deleteIntegrationLogsByClientKey).
     return true;
   } catch (error) {
     console.error("[Database] Failed to save integration log:", error);
@@ -275,16 +274,21 @@ export async function getIntegrationLogs(clientId: number, options?: { limit?: n
   const db = await getDb();
   if (!db) return { logs: [], total: 0 };
 
-  const limit = options?.limit || 50;
+  const limit = options?.limit || 200;
   const offset = options?.offset || 0;
 
-  // Build where conditions
-  const conditions = [eq(integrationLogs.clientId, clientId)];
+  // Build where conditions — excluir siempre los registros de gettoken
+  const conditions = [
+    eq(integrationLogs.clientId, clientId),
+    sql`LOWER(${integrationLogs.serviceName}) NOT LIKE '%gettoken%'`,
+    sql`LOWER(${integrationLogs.serviceName}) NOT LIKE '%token%'`,
+    sql`LOWER(${integrationLogs.url}) NOT LIKE '%gettoken%'`,
+  ];
   if (options?.status && options.status !== "all") {
     conditions.push(eq(integrationLogs.status, options.status));
   }
 
-  const whereClause = conditions.length === 1 ? conditions[0] : and(...conditions);
+  const whereClause = and(...conditions);
 
   // Get total count
   const countResult = await db
@@ -328,56 +332,10 @@ export async function deleteIntegrationLogsByClientKey(clientKey: string) {
 }
 
 /**
- * Retención de logs: 20 registros por tipo de servicio (serviceName) por cliente.
- * Excluye registros de gettoken. Total máximo: 20 x cantidad de servicios distintos.
+ * Los logs de integración NO se limpian automáticamente.
+ * Solo se eliminan cuando el usuario carga un nuevo archivo (deleteIntegrationLogsByClientKey).
+ * Esto permite ver el historial completo de verificar_proveedor, verificar_oc y sincronizar_oc.
  */
-async function cleanOldIntegrationLogs(clientId: number) {
-  const db = await getDb();
-  if (!db) return;
-
-  const MAX_PER_SERVICE = 20;
-
-  // Obtener todos los serviceName distintos para este cliente (excluyendo gettoken)
-  const serviceNames = await db
-    .selectDistinct({ serviceName: integrationLogs.serviceName })
-    .from(integrationLogs)
-    .where(
-      and(
-        eq(integrationLogs.clientId, clientId),
-        sql`LOWER(${integrationLogs.serviceName}) NOT LIKE '%gettoken%'`,
-        sql`LOWER(${integrationLogs.serviceName}) NOT LIKE '%token%'`,
-        sql`LOWER(${integrationLogs.url}) NOT LIKE '%gettoken%'`
-      )
-    );
-
-  const idsToDelete: number[] = [];
-
-  for (const { serviceName } of serviceNames) {
-    if (!serviceName) continue;
-    // Obtener todos los logs de este cliente y servicio, ordenados por fecha desc
-    const logsForService = await db
-      .select({ id: integrationLogs.id })
-      .from(integrationLogs)
-      .where(
-        and(
-          eq(integrationLogs.clientId, clientId),
-          eq(integrationLogs.serviceName, serviceName)
-        )
-      )
-      .orderBy(desc(integrationLogs.createdAt));
-
-    // Si hay más de MAX_PER_SERVICE, marcar los más antiguos para eliminar
-    if (logsForService.length > MAX_PER_SERVICE) {
-      const toDelete = logsForService.slice(MAX_PER_SERVICE).map(log => log.id);
-      idsToDelete.push(...toDelete);
-    }
-  }
-
-  if (idsToDelete.length > 0) {
-    await db.delete(integrationLogs).where(inArray(integrationLogs.id, idsToDelete));
-    console.log(`[Database] Cleaned ${idsToDelete.length} old integration logs for client ${clientId}`);
-  }
-}
 
 export function extractServiceName(url: string): string {
   // Extract service name from URL
