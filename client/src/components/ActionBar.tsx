@@ -112,7 +112,12 @@ export default function ActionBar() {
       return;
     }
 
-    const toVerify = eligibleForVerification.filter(r => selectedRecords.has(r.id));
+    // If there are selected records, verify those (allows re-verification from step 4)
+    // Otherwise fall back to all eligible pending records
+    const selectedEligible = eligibleForVerification.filter(r => selectedRecords.has(r.id));
+    const toVerify = selectedEligible.length > 0
+      ? selectedEligible
+      : eligibleForVerification.filter(r => r.status === "pending" || !r.status);
 
     if (toVerify.length === 0) {
       toast.warning("No hay registros elegibles para verificar. Todos los proveedores seleccionados no existen en el portal.", { position: "bottom-left" });
@@ -339,19 +344,30 @@ export default function ActionBar() {
             <div className="flex-1" />
 
             {/* RIGHT: Verificar */}
-            <Button
-              onClick={handleVerify}
-              disabled={isProcessing || pendingCount === 0}
-              className="gap-2 text-white"
-              style={{ backgroundColor: `rgb(${r}, ${g}, ${b})` }}
-            >
-              {isProcessing ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Search className="w-4 h-4" />
-              )}
-              Verificar pendientes ({eligibleForVerification.filter(r => r.status === "pending" || !r.status).length})
-            </Button>
+            {(() => {
+              const selectedEligible = eligibleForVerification.filter(r => selectedRecords.has(r.id));
+              const pendingEligible = eligibleForVerification.filter(r => r.status === "pending" || !r.status);
+              const verifyCount = selectedEligible.length > 0 ? selectedEligible.length : pendingEligible.length;
+              const isReVerify = selectedEligible.length > 0 && pendingEligible.length === 0;
+              return (
+                <Button
+                  onClick={handleVerify}
+                  disabled={isProcessing || verifyCount === 0}
+                  className="gap-2 text-white"
+                  style={{ backgroundColor: `rgb(${r}, ${g}, ${b})` }}
+                >
+                  {isProcessing ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Search className="w-4 h-4" />
+                  )}
+                  {isReVerify
+                    ? `Re-verificar seleccionados (${verifyCount})`
+                    : `Verificar pendientes (${verifyCount})`
+                  }
+                </Button>
+              );
+            })()}
           </div>
         )}
 
