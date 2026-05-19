@@ -12,13 +12,9 @@ import { useOCSync } from "@/contexts/OCSyncContext";
 import { parseFileData, parseManualInput, downloadTemplate } from "@/lib/file-parser";
 import { toast } from "sonner";
 import { Upload, FileSpreadsheet, Keyboard, X, FileCheck, AlertTriangle, FileUp, Download } from "lucide-react";
-import { trpc } from "@/lib/trpc";
-import { useClientKey } from "@/contexts/ClientKeyContext";
 
 export default function DataUploader() {
   const { records, setRecords } = useOCSync();
-  const { clientKey } = useClientKey();
-  const clearLogsMutation = trpc.logs.clearLogs.useMutation();
   const [isDragging, setIsDragging] = useState(false);
   const [manualText, setManualText] = useState("");
   const [fileName, setFileName] = useState("");
@@ -49,7 +45,7 @@ export default function DataUploader() {
   const processFile = async (file: File) => {
     const ext = file.name.split(".").pop()?.toLowerCase();
     
-    if (![".xlsx", "xls", "csv"].includes(ext || "")) {
+    if (!["xlsx", "xls", "csv"].includes(ext || "")) {
       toast.error("Formato no soportado. Use archivos .xlsx, .xls o .csv", { position: "bottom-left" });
       return;
     }
@@ -58,10 +54,6 @@ export default function DataUploader() {
       const parsed = await parseFileData(file);
       setRecords(parsed);
       setFileName(file.name);
-      // Limpiar logs al cargar nuevo archivo
-      if (clientKey) {
-        clearLogsMutation.mutate({ clientKey });
-      }
       toast.success(`${parsed.length} órdenes de compra cargadas desde ${file.name}. Todos los registros seleccionados.`, { position: "bottom-left" });
     } catch (err: any) {
       toast.error(err?.message || "Error al procesar el archivo", { position: "bottom-left" });
@@ -79,10 +71,6 @@ export default function DataUploader() {
       return;
     }
     setRecords(parsed);
-    // Limpiar logs al cargar nuevos datos manuales
-    if (clientKey) {
-      clearLogsMutation.mutate({ clientKey });
-    }
     toast.success(`${parsed.length} órdenes de compra cargadas. Todos los registros seleccionados.`, { position: "bottom-left" });
   };
 
