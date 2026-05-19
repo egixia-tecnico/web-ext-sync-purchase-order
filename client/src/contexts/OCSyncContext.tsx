@@ -199,7 +199,13 @@ export function OCSyncProvider({ children }: { children: ReactNode }) {
   /** Select all records that are NOT "synced" */
   const selectNonSynced = useCallback(() => {
     setSelectedRecords(new Set(
-      records.filter(r => r.status !== "synced").map(r => r.id)
+      records
+        .filter(r =>
+          r.status !== "synced" &&
+          r.status !== "canceled" &&
+          r.status !== "supplier_not_exists"
+        )
+        .map(r => r.id)
     ));
   }, [records]);
 

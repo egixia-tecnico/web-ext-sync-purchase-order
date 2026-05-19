@@ -5,7 +5,7 @@
  * Filtros avanzados rápidos: estado, despacho, proveedor, Ult. Sinc.
  * Ordenamiento: no-sincronizados primero, sincronizados al final.
  */
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useOCSync, type OCRecord } from "@/contexts/OCSyncContext";
 import { formatProviderCodes } from "@shared/utils";
@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Search, ChevronDown, ChevronUp, CheckCircle2, XCircle,
   UserX, AlertTriangle, Clock, Loader2, AlertOctagon, ChevronLeft, ChevronRight,
-  Filter, X, Truck
+  Filter, X, Truck, Plus, Trash2
 } from "lucide-react";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: string; borderColor: string; icon: React.ReactNode }> = {
@@ -207,12 +207,14 @@ export default function ResultsTable() {
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const [showFilters, setShowFilters] = useState(false);
-  const [activeQuickFilters, setActiveQuickFilters] = useState<Set<string>>(new Set());
+  // filterGroups: array of groups. Each group is an array of filter IDs.
+  // Logic: AND within a group, OR between groups.
+  const [filterGroups, setFilterGroups] = useState<string[][]>([[]]);
 
   // Reset page when filter changes
   useEffect(() => {
     setPage(0);
-  }, [activeKPIFilter, searchTerm, activeQuickFilters]);
+  }, [activeKPIFilter, searchTerm, filterGroups]);
 
   // Collect unique delivery_status values from records
   const deliveryStatuses = useMemo(() => {
@@ -280,19 +282,34 @@ export default function ResultsTable() {
     return filters;
   }, [deliveryStatuses]);
 
-  const toggleQuickFilter = (id: string) => {
-    setActiveQuickFilters(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+  const addFilterGroup = useCallback(() => {
+    setFilterGroups(prev => [...prev, []]);
+  }, []);
+
+  const removeFilterGroup = useCallback((groupIdx: number) => {
+    setFilterGroups(prev => {
+      const next = prev.filter((_, i) => i !== groupIdx);
+      return next.length === 0 ? [[]] : next;
+    });
+  }, []);
+
+  const toggleFilterInGroup = useCallback((groupIdx: number, filterId: string) => {
+    setFilterGroups(prev => {
+      const next = prev.map((g, i) => {
+        if (i !== groupIdx) return g;
+        return g.includes(filterId) ? g.filter(id => id !== filterId) : [...g, filterId];
+      });
       return next;
     });
-  };
+  }, []);
 
   const clearAllFilters = () => {
-    setActiveQuickFilters(new Set());
+    setFilterGroups([[]]);
     setSearchTerm("");
   };
+
+  // Count total active filters across all groups
+  const totalActiveFilters = filterGroups.reduce((acc, g) => acc + g.length, 0);
 
   const filteredRecords = useMemo(() => {
     let result = [...records];
@@ -302,12 +319,17 @@ export default function ResultsTable() {
       result = result.filter(r => r.status === activeKPIFilter);
     }
 
-    // Apply quick filters (OR within active filters)
-    if (activeQuickFilters.size > 0) {
-      const activeFilterFns = quickFilters
-        .filter(f => activeQuickFilters.has(f.id))
-        .map(f => f.fn);
-      result = result.filter(r => activeFilterFns.some(fn => fn(r)));
+    // Apply grouped filters: AND within group, OR between groups
+    const activeGroups = filterGroups.filter(g => g.length > 0);
+    if (activeGroups.length > 0) {
+      result = result.filter(r =>
+        activeGroups.some(group =>
+          group.every(filterId => {
+            const filterDef = quickFilters.find(f => f.id === filterId);
+            return filterDef ? filterDef.fn(r) : false;
+          })
+        )
+      );
     }
 
     if (searchTerm) {
@@ -334,7 +356,7 @@ export default function ResultsTable() {
     });
 
     return result;
-  }, [records, searchTerm, activeKPIFilter, activeQuickFilters, quickFilters, sortField, sortDir]);
+  }, [records, searchTerm, activeKPIFilter, filterGroups, quickFilters, sortField, sortDir]);
 
   const paginatedRecords = useMemo(() => {
     return filteredRecords.slice(page * pageSize, (page + 1) * pageSize);
@@ -380,7 +402,7 @@ export default function ResultsTable() {
   const showDespachoColumn = currentStep >= 3;
   // In step 6 (Finalizado), hide checkboxes
   const showCheckboxes = currentStep !== 6;
-  const hasActiveFilters = activeQuickFilters.size > 0 || searchTerm.length > 0;
+  const hasActiveFilters = totalActiveFilters > 0 || searchTerm.length > 0;
 
   return (
     <motion.div
@@ -410,9 +432,9 @@ export default function ResultsTable() {
             >
               <Filter className="w-3.5 h-3.5" />
               Filtros
-              {activeQuickFilters.size > 0 && (
+              {totalActiveFilters > 0 && (
                 <span className="ml-1 bg-primary text-primary-foreground rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">
-                  {activeQuickFilters.size}
+                  {totalActiveFilters}
                 </span>
               )}
             </Button>
@@ -446,7 +468,7 @@ export default function ResultsTable() {
           </div>
         </div>
 
-        {/* Quick Filters Panel */}
+        {/* Grouped Filters Panel */}
         <AnimatePresence>
           {showFilters && (
             <motion.div
@@ -456,50 +478,105 @@ export default function ResultsTable() {
               transition={{ duration: 0.2 }}
               className="overflow-hidden"
             >
-              <div className="pt-2 pb-1 border-t border-border/50">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                  Filtros rápidos — clic para activar (se combinan con OR)
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {quickFilters.map(f => {
-                    const isActive = activeQuickFilters.has(f.id);
-                    return (
-                      <button
-                        key={f.id}
-                        onClick={() => toggleQuickFilter(f.id)}
-                        className={`
-                          inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-all
-                          ${isActive
-                            ? `${f.color} ring-2 ring-offset-1 ring-current`
-                            : `${f.color} opacity-60 hover:opacity-100`
-                          }
-                        `}
-                      >
-                        {isActive && <CheckCircle2 className="w-3 h-3" />}
-                        {f.label}
-                      </button>
-                    );
-                  })}
+              <div className="pt-2 pb-2 border-t border-border/50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Filtros agrupados — AND dentro del grupo · OR entre grupos
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-[10px] gap-1 px-2"
+                    onClick={addFilterGroup}
+                  >
+                    <Plus className="w-3 h-3" />
+                    Agregar grupo
+                  </Button>
                 </div>
+
+                {filterGroups.map((group, groupIdx) => (
+                  <div key={groupIdx} className="flex flex-wrap items-center gap-1.5 p-2 rounded-lg bg-muted/30 border border-border/40">
+                    {/* Group label */}
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mr-1">
+                      {groupIdx === 0 ? "Grupo 1" : `OR Grupo ${groupIdx + 1}`}
+                    </span>
+
+                    {/* Filter chips for this group */}
+                    {quickFilters.map(f => {
+                      const isActive = group.includes(f.id);
+                      return (
+                        <button
+                          key={f.id}
+                          onClick={() => toggleFilterInGroup(groupIdx, f.id)}
+                          className={`
+                            inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border transition-all
+                            ${isActive
+                              ? `${f.color} ring-2 ring-offset-1 ring-current`
+                              : `${f.color} opacity-50 hover:opacity-90`
+                            }
+                          `}
+                        >
+                          {isActive && <CheckCircle2 className="w-2.5 h-2.5" />}
+                          {f.label}
+                        </button>
+                      );
+                    })}
+
+                    {/* Remove group button (only if more than 1 group) */}
+                    {filterGroups.length > 1 && (
+                      <button
+                        onClick={() => removeFilterGroup(groupIdx)}
+                        className="ml-auto p-1 rounded hover:bg-destructive/10 hover:text-destructive transition-colors"
+                        title="Eliminar grupo"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+                {/* Select all filtered results */}
+                {filteredRecords.length > 0 && showCheckboxes && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1.5"
+                      onClick={handleSelectAllFiltered}
+                    >
+                      <CheckCircle2 className="w-3 h-3" />
+                      {allFilteredSelected
+                        ? `Deseleccionar ${filteredRecords.length} filtrados`
+                        : `Seleccionar ${filteredRecords.length} filtrados`
+                      }
+                    </Button>
+                    <span className="text-[10px] text-muted-foreground">
+                      {filteredRecords.length} registros coinciden con los filtros
+                    </span>
+                  </div>
+                )}
               </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Active filter chips */}
-        {activeQuickFilters.size > 0 && !showFilters && (
+        {/* Active filter group summary chips */}
+        {totalActiveFilters > 0 && !showFilters && (
           <div className="flex flex-wrap gap-1.5 pt-1">
-            {quickFilters.filter(f => activeQuickFilters.has(f.id)).map(f => (
-              <span
-                key={f.id}
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${f.color}`}
-              >
-                {f.label}
-                <button onClick={() => toggleQuickFilter(f.id)} className="ml-0.5 hover:opacity-70">
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
+            {filterGroups.map((group, groupIdx) =>
+              group.length > 0 ? (
+                <span
+                  key={groupIdx}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border bg-primary/10 text-primary border-primary/30"
+                >
+                  {groupIdx > 0 && <span className="font-bold text-[10px] mr-0.5">OR</span>}
+                  {group.map(fid => quickFilters.find(f => f.id === fid)?.label).filter(Boolean).join(" AND ")}
+                  <button onClick={() => removeFilterGroup(groupIdx)} className="ml-0.5 hover:opacity-70">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ) : null
+            )}
           </div>
         )}
       </div>

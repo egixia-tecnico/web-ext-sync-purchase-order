@@ -374,15 +374,17 @@ export function useOCVerification() {
 
     // Get batch config
     const batchSize = batchConfigQuery.data?.batchSize ?? 10;
-    const batchDelaySeconds = batchConfigQuery.data?.batchDelaySeconds ?? 3;
+    const PARALLEL_GROUP_SIZE = 4;  // Same as verification: 4 batches in parallel
+    const GROUP_DELAY_MS = 2000;    // 2s pause between groups
     const totalBatches = Math.ceil(toSync.length / batchSize);
+    const totalGroups = Math.ceil(totalBatches / PARALLEL_GROUP_SIZE);
 
     setIsProcessing(true);
     setProgress({ current: 0, total: toSync.length });
 
     if (totalBatches > 1) {
       toast.info(
-        `Sincronizando ${toSync.length} registros en ${totalBatches} lotes de ${batchSize} (espera de ${batchDelaySeconds}s entre lotes)`,
+        `Sincronizando ${toSync.length} registros en ${totalBatches} lotes de ${batchSize} · ${totalGroups} grupos de ${PARALLEL_GROUP_SIZE} en paralelo`,
         { position: "bottom-left", duration: 5000 }
       );
     }
@@ -393,85 +395,100 @@ export function useOCVerification() {
     let wasCancelled = false;
     const allSuccessfulOrders: OCRecord[] = [];
 
-    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+    // Build all batches upfront
+    const batches: OCRecord[][] = [];
+    for (let i = 0; i < totalBatches; i++) {
+      batches.push(toSync.slice(i * batchSize, Math.min((i + 1) * batchSize, toSync.length)));
+    }
+
+    // Process in groups of PARALLEL_GROUP_SIZE
+    for (let groupIndex = 0; groupIndex < totalGroups; groupIndex++) {
       if (cancelRef.current) {
         wasCancelled = true;
         break;
       }
 
-      const batchStart = batchIndex * batchSize;
-      const batchEnd = Math.min(batchStart + batchSize, toSync.length);
-      const batchTargets = toSync.slice(batchStart, batchEnd);
+      const groupStart = groupIndex * PARALLEL_GROUP_SIZE;
+      const groupEnd = Math.min(groupStart + PARALLEL_GROUP_SIZE, totalBatches);
+      const groupBatches = batches.slice(groupStart, groupEnd);
 
-      try {
-        const result = await synchronizeBatchMutation.mutateAsync({
-          orders: batchTargets.map(r => ({
-            buyerExternalCode: r.buyer_external_code,
-            purchaseOrderNumber: r.purchase_order_number,
-            sendEmails: false,
-          })),
-          clientKey: clientKey || undefined,
-        });
-
-        const batchSuccess = result.summary.success;
-        const batchFailed = result.summary.failed;
-        totalSuccess += batchSuccess;
-        totalFailed += batchFailed;
-
-        // Update records with sync results
-        for (let i = 0; i < batchTargets.length; i++) {
-          const record = batchTargets[i];
-          const syncResult = result.results[i];
-
-          if (syncResult && !syncResult.success) {
-            // Build error message with HTTP status code and API message
-            const httpCode = syncResult.httpStatus ? `[HTTP ${syncResult.httpStatus}] ` : '';
-            const apiMsg = syncResult.errorMessage || syncResult.error || "Error al sincronizar";
-            updateRecord(record.id, {
-              statusMessage: `${httpCode}${apiMsg}`,
+      // Execute all batches in this group in parallel
+      const groupResults = await Promise.allSettled(
+        groupBatches.map(async (batchTargets, localIdx) => {
+          const globalBatchIdx = groupStart + localIdx;
+          try {
+            const result = await synchronizeBatchMutation.mutateAsync({
+              orders: batchTargets.map(r => ({
+                buyerExternalCode: r.buyer_external_code,
+                purchaseOrderNumber: r.purchase_order_number,
+                sendEmails: false,
+              })),
+              clientKey: clientKey || undefined,
             });
-          } else if (syncResult?.success) {
-            allSuccessfulOrders.push(record);
+            return { batchTargets, result, globalBatchIdx };
+          } catch (err: any) {
+            return { batchTargets, error: err, globalBatchIdx };
           }
+        })
+      );
+
+      // Process results from this group
+      let commFailure: "token" | "service" | null = null;
+      for (const settled of groupResults) {
+        if (settled.status === "fulfilled") {
+          const { batchTargets, result, error, globalBatchIdx } = settled.value as any;
+
+          if (error) {
+            const syncErrMsg = error?.message || "Error al sincronizar";
+            if (syncErrMsg.includes("COMMUNICATION_FAILURE_TOKEN")) {
+              commFailure = "token";
+              break;
+            } else if (syncErrMsg.includes("COMMUNICATION_FAILURE_SERVICE")) {
+              commFailure = "service";
+              break;
+            }
+            toast.error(`Error en lote sync ${globalBatchIdx + 1}: ${syncErrMsg}`, { position: "bottom-left", duration: 5000 });
+            const errorUpdates = batchTargets.map((r: OCRecord) => ({
+              id: r.id,
+              updates: { statusMessage: `Error lote sync ${globalBatchIdx + 1}: ${syncErrMsg}` },
+            }));
+            updateRecordsBatch(errorUpdates);
+            totalFailed += batchTargets.length;
+            processedCount += batchTargets.length;
+          } else {
+            totalSuccess += result.summary.success;
+            totalFailed += result.summary.failed;
+            for (let i = 0; i < batchTargets.length; i++) {
+              const record = batchTargets[i];
+              const syncResult = result.results[i];
+              if (syncResult && !syncResult.success) {
+                const httpCode = syncResult.httpStatus ? `[HTTP ${syncResult.httpStatus}] ` : '';
+                const apiMsg = syncResult.errorMessage || syncResult.error || "Error al sincronizar";
+                updateRecord(record.id, { statusMessage: `${httpCode}${apiMsg}` });
+              } else if (syncResult?.success) {
+                allSuccessfulOrders.push(record);
+              }
+            }
+            processedCount += batchTargets.length;
+          }
+          setProgress({ current: processedCount, total: toSync.length });
         }
-
-        processedCount += batchTargets.length;
-        setProgress({ current: processedCount, total: toSync.length });
-
-      } catch (err: any) {
-        const syncErrMsg = err?.message || "Error al sincronizar";
-        if (syncErrMsg.includes("COMMUNICATION_FAILURE_TOKEN")) {
-          (window as any).__showCommFailure?.("token");
-          setIsProcessing(false);
-          setIsCancelling(false);
-          return { success: totalSuccess, failed: totalFailed + (toSync.length - processedCount), skipped: 0, wasCancelled: false };
-        } else if (syncErrMsg.includes("COMMUNICATION_FAILURE_SERVICE")) {
-          (window as any).__showCommFailure?.("service");
-          setIsProcessing(false);
-          setIsCancelling(false);
-          return { success: totalSuccess, failed: totalFailed + (toSync.length - processedCount), skipped: 0, wasCancelled: false };
-        }
-
-        toast.error(`Error en lote sync ${batchIndex + 1}: ${syncErrMsg}`, { position: "bottom-left", duration: 5000 });
-
-        const errorUpdates = batchTargets.map(r => ({
-          id: r.id,
-          updates: { statusMessage: `Error lote sync ${batchIndex + 1}: ${syncErrMsg}` },
-        }));
-        updateRecordsBatch(errorUpdates);
-
-        totalFailed += batchTargets.length;
-        processedCount += batchTargets.length;
-        setProgress({ current: processedCount, total: toSync.length });
       }
 
-      // Wait between batches
-      if (batchIndex < totalBatches - 1 && !cancelRef.current) {
+      if (commFailure) {
+        (window as any).__showCommFailure?.(commFailure);
+        setIsProcessing(false);
+        setIsCancelling(false);
+        return { success: totalSuccess, failed: totalFailed + (toSync.length - processedCount), skipped: 0, wasCancelled: false };
+      }
+
+      // Pause 2s between groups (not after last group)
+      if (groupIndex < totalGroups - 1 && !cancelRef.current) {
         toast.info(
-          `Esperando ${batchDelaySeconds}s antes del lote sync ${batchIndex + 2} de ${totalBatches}...`,
-          { position: "bottom-left", duration: batchDelaySeconds * 1000 }
+          `Grupo sync ${groupIndex + 1}/${totalGroups} completado. Esperando 2s...`,
+          { position: "bottom-left", duration: GROUP_DELAY_MS }
         );
-        await delay(batchDelaySeconds * 1000);
+        await delay(GROUP_DELAY_MS);
       }
     }
 

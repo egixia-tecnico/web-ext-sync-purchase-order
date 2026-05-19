@@ -717,3 +717,9 @@
 ## Botón Volver al inicio en verificación de proveedores
 
 - [x] Agregar botón "Volver al inicio" en SupplierCheckPanel (paso 2) para regresar al paso 1 y cargar un archivo diferente
+
+## Mejoras selección, sincronización y filtros
+
+- [x] selectNonSynced: excluir status canceled y supplier_not_exists de la selección automática
+- [x] Sincronización paso 5: grupos paralelos de 4 lotes con pausa 2s entre grupos (igual que verificación)
+- [x] Filtros avanzados agrupados: AND dentro del grupo, OR entre grupos, con selección masiva de resultados filtrados
