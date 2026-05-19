@@ -723,3 +723,9 @@
 - [x] selectNonSynced: excluir status canceled y supplier_not_exists de la selección automática
 - [x] Sincronización paso 5: grupos paralelos de 4 lotes con pausa 2s entre grupos (igual que verificación)
 - [x] Filtros avanzados agrupados: AND dentro del grupo, OR entre grupos, con selección masiva de resultados filtrados
+
+## Reintento final por errores de red (ECONNRESET / socket hang up)
+
+- [x] Verificación OCs: acumular lotes que fallen por error de red y ejecutarlos como reintento al finalizar todos los grupos
+- [x] Sincronización OCs: mismo mecanismo de reintento final para lotes fallidos por error de red
+- [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)

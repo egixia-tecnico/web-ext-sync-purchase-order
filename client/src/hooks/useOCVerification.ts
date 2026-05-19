@@ -28,6 +28,16 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const OC_PARALLEL_GROUP_SIZE = 4;  // Max concurrent API calls per group
 const OC_GROUP_DELAY_MS = 2000;    // Delay between groups (ms)
 
+// Network error patterns that qualify for retry (ECONNRESET, socket hang up, etc.)
+const isNetworkError = (msg: string) =>
+  msg.includes("ECONNRESET") ||
+  msg.includes("socket hang up") ||
+  msg.includes("ECONNREFUSED") ||
+  msg.includes("ETIMEDOUT") ||
+  msg.includes("ENOTFOUND") ||
+  msg.includes("network") ||
+  msg.includes("fetch failed");
+
 export function useOCVerification() {
   const { records, updateRecord, updateRecordsBatch, setIsProcessing, setProgress, selectedRecords } = useOCSync();
   const { clientKey } = useClientKey();
@@ -113,6 +123,9 @@ export function useOCVerification() {
     }
 
     const totalGroups = parallelGroups.length;
+
+    // Accumulate batches that failed due to network errors for final retry
+    const networkRetryBatches: OCRecord[][] = [];
 
     for (let groupIdx = 0; groupIdx < totalGroups; groupIdx++) {
       if (cancelRef.current) {
@@ -260,6 +273,8 @@ export function useOCVerification() {
             summaryDelta: { total: batchTargets.length, found: 0, not_found: 0, supplier_not_exists: 0, errors: batchTargets.length },
             count: batchTargets.length,
             error: errorMsg,
+            isNetworkError: isNetworkError(errorMsg),
+            batchTargets,
           };
         }
       };
@@ -272,7 +287,7 @@ export function useOCVerification() {
           )
         );
 
-        // Apply all updates and accumulate summaries
+        // Apply all updates and accumulate summaries; collect network-failed batches for retry
         for (const res of groupResults) {
           updateRecordsBatch(res.updates);
           globalSummary.total += res.summaryDelta.total;
@@ -281,6 +296,10 @@ export function useOCVerification() {
           globalSummary.supplier_not_exists += res.summaryDelta.supplier_not_exists;
           globalSummary.errors += res.summaryDelta.errors;
           processedCount += res.count;
+          // Queue network-failed batches for final retry
+          if (res.error && (res as any).isNetworkError && (res as any).batchTargets) {
+            networkRetryBatches.push((res as any).batchTargets as OCRecord[]);
+          }
         }
         setProgress({ current: processedCount, total: targets.length });
 
@@ -312,6 +331,94 @@ export function useOCVerification() {
         );
         await delay(OC_GROUP_DELAY_MS);
       }
+    }
+
+    // --- Final retry for network-failed batches (ECONNRESET / socket hang up) ---
+    // processBatch is defined inside the groupIdx loop, so we replicate a minimal retry call here
+    if (!wasCancelled && networkRetryBatches.length > 0) {
+      const retryTargets = networkRetryBatches.flat();
+      toast.info(
+        `Reintentando ${retryTargets.length} registros que fallaron por error de red...`,
+        { position: "bottom-left", duration: 5000 }
+      );
+      await delay(2000);
+
+      // Mark retry targets as checking again
+      updateRecordsBatch(retryTargets.map(r => ({
+        id: r.id,
+        updates: { status: "checking" as const, statusMessage: "Reintentando por error de red..." }
+      })));
+
+      // Run all retry batches in parallel (single group) — inline retry logic
+      const retryResults = await Promise.all(
+        networkRetryBatches.map(async (retryBatch, idx) => {
+          const retryLabel = `reintento ${idx + 1} de ${networkRetryBatches.length}`;
+          try {
+            const result = await verifyBatchMutation.mutateAsync({
+              orders: retryBatch.map(r => ({
+                purchaseOrderId: r.purchase_order_number,
+                providerExternalCode1: r.provider_external_code_1 || r.provider_external_code || "",
+                providerExternalCode2: r.provider_external_code_2 || "",
+                buyerCode: r.buyer_external_code,
+              })),
+              clientKey: clientKey || undefined,
+              isFirstBatch: false,
+              isLastBatch: true,
+            });
+            const updates: Array<{ id: string; updates: Partial<OCRecord> }> = [];
+            const summaryDelta = { total: 0, found: 0, not_found: 0, supplier_not_exists: 0, errors: 0 };
+            for (let i = 0; i < retryBatch.length; i++) {
+              const target = retryBatch[i];
+              const apiResult = result.results[i];
+              if (!apiResult) {
+                updates.push({ id: target.id, updates: { status: "error", statusMessage: "Sin resultado (reintento)" } });
+                summaryDelta.errors++; summaryDelta.total++;
+                continue;
+              }
+              const canceledStr = apiResult.canceled != null ? String(apiResult.canceled).trim().toUpperCase() : "";
+              const isCanceled = apiResult.status === "found" && canceledStr !== "" && canceledStr !== "NO" && canceledStr !== "0" && canceledStr !== "FALSE";
+              let resolvedStatus: OCRecord["status"];
+              let resolvedMessage: string;
+              if (apiResult.status === "found") {
+                resolvedStatus = isCanceled ? "canceled" : "synced";
+                resolvedMessage = isCanceled ? "Anulada" : `Sincronizada (${apiResult.syncStatus})`;
+                summaryDelta.found++;
+              } else if (apiResult.status === "not_found") {
+                resolvedStatus = "not_found"; resolvedMessage = "OC no encontrada"; summaryDelta.not_found++;
+              } else if (apiResult.status === "supplier_not_exists") {
+                resolvedStatus = "supplier_not_exists"; resolvedMessage = "Proveedor no existe"; summaryDelta.supplier_not_exists++;
+              } else {
+                resolvedStatus = "error"; resolvedMessage = apiResult.error || "Error"; summaryDelta.errors++;
+              }
+              summaryDelta.total++;
+              updates.push({ id: target.id, updates: { status: resolvedStatus, statusMessage: resolvedMessage } });
+            }
+            return { updates, summaryDelta, originalCount: retryBatch.length };
+          } catch (retryErr: any) {
+            const retryErrMsg = retryErr?.message || "Error desconocido";
+            toast.error(`Error en ${retryLabel}: ${retryErrMsg}`, { position: "bottom-left", duration: 5000 });
+            return {
+              updates: retryBatch.map(r => ({ id: r.id, updates: { status: "error" as const, statusMessage: `Error reintento: ${retryErrMsg}` } })),
+              summaryDelta: { total: retryBatch.length, found: 0, not_found: 0, supplier_not_exists: 0, errors: retryBatch.length },
+              originalCount: retryBatch.length,
+            };
+          }
+        })
+      );
+
+      for (const res of retryResults) {
+        updateRecordsBatch(res.updates);
+        // Adjust global summary: subtract the errors counted in the first pass, add retry results
+        globalSummary.errors = Math.max(0, globalSummary.errors - res.originalCount) + res.summaryDelta.errors;
+        globalSummary.found += res.summaryDelta.found;
+        globalSummary.not_found += res.summaryDelta.not_found;
+        globalSummary.supplier_not_exists += res.summaryDelta.supplier_not_exists;
+        const retrySucceeded = res.summaryDelta.errors < res.originalCount;
+        if (retrySucceeded) {
+          toast.success(`Reintento exitoso: ${res.originalCount - res.summaryDelta.errors} registros recuperados`, { position: "bottom-left", duration: 4000 });
+        }
+      }
+      setProgress({ current: processedCount, total: targets.length });
     }
 
     // Final summary toast
@@ -394,6 +501,8 @@ export function useOCVerification() {
     let processedCount = 0;
     let wasCancelled = false;
     const allSuccessfulOrders: OCRecord[] = [];
+    // Accumulate batches that failed due to network errors for final retry
+    const syncNetworkRetryBatches: OCRecord[][] = [];
 
     // Build all batches upfront
     const batches: OCRecord[][] = [];
@@ -447,13 +556,19 @@ export function useOCVerification() {
               commFailure = "service";
               break;
             }
-            toast.error(`Error en lote sync ${globalBatchIdx + 1}: ${syncErrMsg}`, { position: "bottom-left", duration: 5000 });
-            const errorUpdates = batchTargets.map((r: OCRecord) => ({
-              id: r.id,
-              updates: { statusMessage: `Error lote sync ${globalBatchIdx + 1}: ${syncErrMsg}` },
-            }));
-            updateRecordsBatch(errorUpdates);
-            totalFailed += batchTargets.length;
+            // Queue network errors for final retry instead of marking as failed
+            if (isNetworkError(syncErrMsg)) {
+              syncNetworkRetryBatches.push(batchTargets);
+              toast.warning(`Error de red en lote sync ${globalBatchIdx + 1}: se reintentará al final`, { position: "bottom-left", duration: 4000 });
+            } else {
+              toast.error(`Error en lote sync ${globalBatchIdx + 1}: ${syncErrMsg}`, { position: "bottom-left", duration: 5000 });
+              const errorUpdates = batchTargets.map((r: OCRecord) => ({
+                id: r.id,
+                updates: { statusMessage: `Error lote sync ${globalBatchIdx + 1}: ${syncErrMsg}` },
+              }));
+              updateRecordsBatch(errorUpdates);
+              totalFailed += batchTargets.length;
+            }
             processedCount += batchTargets.length;
           } else {
             totalSuccess += result.summary.success;
@@ -493,6 +608,66 @@ export function useOCVerification() {
     }
 
     setProgress({ current: processedCount, total: toSync.length });
+
+    // --- Final retry for network-failed sync batches (ECONNRESET / socket hang up) ---
+    if (!wasCancelled && syncNetworkRetryBatches.length > 0) {
+      const syncRetryTargets = syncNetworkRetryBatches.flat();
+      toast.info(
+        `Reintentando sincronización de ${syncRetryTargets.length} registros que fallaron por error de red...`,
+        { position: "bottom-left", duration: 5000 }
+      );
+      await delay(2000);
+
+      const syncRetryResults = await Promise.allSettled(
+        syncNetworkRetryBatches.map(async (retryBatch, idx) => {
+          try {
+            const result = await synchronizeBatchMutation.mutateAsync({
+              orders: retryBatch.map(r => ({
+                buyerExternalCode: r.buyer_external_code,
+                purchaseOrderNumber: r.purchase_order_number,
+                sendEmails: false,
+              })),
+              clientKey: clientKey || undefined,
+            });
+            return { retryBatch, result };
+          } catch (retryErr: any) {
+            return { retryBatch, error: retryErr };
+          }
+        })
+      );
+
+      for (const settled of syncRetryResults) {
+        if (settled.status === "fulfilled") {
+          const { retryBatch, result, error } = settled.value as any;
+          if (error) {
+            const retryErrMsg = error?.message || "Error";
+            toast.error(`Reintento sync fallido: ${retryErrMsg}`, { position: "bottom-left", duration: 5000 });
+            updateRecordsBatch(retryBatch.map((r: OCRecord) => ({
+              id: r.id,
+              updates: { statusMessage: `Error reintento sync: ${retryErrMsg}` },
+            })));
+            totalFailed += retryBatch.length;
+          } else {
+            totalSuccess += result.summary.success;
+            totalFailed += result.summary.failed;
+            for (let i = 0; i < retryBatch.length; i++) {
+              const record = retryBatch[i];
+              const syncResult = result.results[i];
+              if (syncResult?.success) {
+                allSuccessfulOrders.push(record);
+              } else if (syncResult && !syncResult.success) {
+                const httpCode = syncResult.httpStatus ? `[HTTP ${syncResult.httpStatus}] ` : '';
+                const apiMsg = syncResult.errorMessage || syncResult.error || "Error al sincronizar";
+                updateRecord(record.id, { statusMessage: `${httpCode}${apiMsg}` });
+              }
+            }
+            if (result.summary.success > 0) {
+              toast.success(`Reintento sync exitoso: ${result.summary.success} registros sincronizados`, { position: "bottom-left", duration: 4000 });
+            }
+          }
+        }
+      }
+    }
 
     // Show summary toast
     const cancelledCount = toSync.length - processedCount;
