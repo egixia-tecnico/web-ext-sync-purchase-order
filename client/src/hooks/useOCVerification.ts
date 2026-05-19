@@ -477,36 +477,54 @@ export function useOCVerification() {
       return { success: 0, failed: 0, skipped: 0, wasCancelled: false };
     }
 
-    // Get batch config
-    const batchSize = batchConfigQuery.data?.batchSize ?? 10;
-    const PARALLEL_GROUP_SIZE = 4;  // Same as verification: 4 batches in parallel
+    // ─── Build grouped batches: group by buyer_external_code, then split into
+    //     chunks of up to MAX_OC_PER_CALL OC numbers (comma-separated, no spaces).
+    //     Each chunk becomes one API call to synchronize_purchase_order.
+    const MAX_OC_PER_CALL = 50;
+    const PARALLEL_GROUP_SIZE = 4;  // 4 API calls in parallel
     const GROUP_DELAY_MS = 2000;    // 2s pause between groups
-    const totalBatches = Math.ceil(toSync.length / batchSize);
+
+    // Group records by buyer code
+    const byBuyer = new Map<string, OCRecord[]>();
+    for (const r of toSync) {
+      const key = r.buyer_external_code;
+      if (!byBuyer.has(key)) byBuyer.set(key, []);
+      byBuyer.get(key)!.push(r);
+    }
+
+    // Build flat list of { records[], buyerCode, ocNumbers } chunks
+    type SyncChunk = { records: OCRecord[]; buyerCode: string; ocNumbers: string };
+    const allChunks: SyncChunk[] = [];
+    for (const [buyerCode, buyerRecords] of Array.from(byBuyer.entries())) {
+      for (let i = 0; i < buyerRecords.length; i += MAX_OC_PER_CALL) {
+        const slice = buyerRecords.slice(i, i + MAX_OC_PER_CALL);
+        allChunks.push({
+          records: slice,
+          buyerCode,
+          ocNumbers: slice.map((r: OCRecord) => r.purchase_order_number).join(","),
+        });
+      }
+    }
+
+    const totalBatches = allChunks.length;
     const totalGroups = Math.ceil(totalBatches / PARALLEL_GROUP_SIZE);
 
     setIsProcessing(true);
     setProgress({ current: 0, total: toSync.length });
 
-    if (totalBatches > 1) {
-      toast.info(
-        `Sincronizando ${toSync.length} registros en ${totalBatches} lotes de ${batchSize} · ${totalGroups} grupos de ${PARALLEL_GROUP_SIZE} en paralelo`,
-        { position: "bottom-left", duration: 5000 }
-      );
-    }
+    const societyCount = byBuyer.size;
+    toast.info(
+      `Sincronizando ${toSync.length} OCs · ${societyCount} sociedad${societyCount > 1 ? "es" : ""} · ${totalBatches} llamada${totalBatches > 1 ? "s" : ""} (máx. ${MAX_OC_PER_CALL} OC/llamada)`,
+      { position: "bottom-left", duration: 5000 }
+    );
 
     let totalSuccess = 0;
     let totalFailed = 0;
     let processedCount = 0;
     let wasCancelled = false;
     const allSuccessfulOrders: OCRecord[] = [];
-    // Accumulate batches that failed due to network errors for final retry
-    const syncNetworkRetryBatches: OCRecord[][] = [];
-
-    // Build all batches upfront
-    const batches: OCRecord[][] = [];
-    for (let i = 0; i < totalBatches; i++) {
-      batches.push(toSync.slice(i * batchSize, Math.min((i + 1) * batchSize, toSync.length)));
-    }
+    // Accumulate chunks that failed due to network errors for final retry
+    const syncNetworkRetryChunks: SyncChunk[] = [];
 
     // Process in groups of PARALLEL_GROUP_SIZE
     for (let groupIndex = 0; groupIndex < totalGroups; groupIndex++) {
@@ -517,24 +535,24 @@ export function useOCVerification() {
 
       const groupStart = groupIndex * PARALLEL_GROUP_SIZE;
       const groupEnd = Math.min(groupStart + PARALLEL_GROUP_SIZE, totalBatches);
-      const groupBatches = batches.slice(groupStart, groupEnd);
+      const groupChunks = allChunks.slice(groupStart, groupEnd);
 
-      // Execute all batches in this group in parallel
+      // Execute all chunks in this group in parallel
       const groupResults = await Promise.allSettled(
-        groupBatches.map(async (batchTargets, localIdx) => {
+        groupChunks.map(async (chunk, localIdx) => {
           const globalBatchIdx = groupStart + localIdx;
           try {
             const result = await synchronizeBatchMutation.mutateAsync({
-              orders: batchTargets.map(r => ({
-                buyerExternalCode: r.buyer_external_code,
-                purchaseOrderNumber: r.purchase_order_number,
+              batches: [{
+                buyerExternalCode: chunk.buyerCode,
+                purchaseOrderNumbers: chunk.ocNumbers,
                 sendEmails: true,
-              })),
+              }],
               clientKey: clientKey || undefined,
             });
-            return { batchTargets, result, globalBatchIdx };
+            return { chunk, result, globalBatchIdx };
           } catch (err: any) {
-            return { batchTargets, error: err, globalBatchIdx };
+            return { chunk, error: err, globalBatchIdx };
           }
         })
       );
@@ -543,7 +561,7 @@ export function useOCVerification() {
       let commFailure: "token" | "service" | null = null;
       for (const settled of groupResults) {
         if (settled.status === "fulfilled") {
-          const { batchTargets, result, error, globalBatchIdx } = settled.value as any;
+          const { chunk, result, error, globalBatchIdx } = settled.value as any;
 
           if (error) {
             const syncErrMsg = error?.message || "Error al sincronizar";
@@ -554,35 +572,35 @@ export function useOCVerification() {
               commFailure = "service";
               break;
             }
-            // Queue network errors for final retry instead of marking as failed
+            // Queue network errors for final retry
             if (isNetworkError(syncErrMsg)) {
-              syncNetworkRetryBatches.push(batchTargets);
+              syncNetworkRetryChunks.push(chunk);
               toast.warning(`Error de red en lote sync ${globalBatchIdx + 1}: se reintentará al final`, { position: "bottom-left", duration: 4000 });
             } else {
               toast.error(`Error en lote sync ${globalBatchIdx + 1}: ${syncErrMsg}`, { position: "bottom-left", duration: 5000 });
-              const errorUpdates = batchTargets.map((r: OCRecord) => ({
+              updateRecordsBatch(chunk.records.map((r: OCRecord) => ({
                 id: r.id,
                 updates: { statusMessage: `Error lote sync ${globalBatchIdx + 1}: ${syncErrMsg}` },
-              }));
-              updateRecordsBatch(errorUpdates);
-              totalFailed += batchTargets.length;
+              })));
+              totalFailed += chunk.records.length;
             }
-            processedCount += batchTargets.length;
+            processedCount += chunk.records.length;
           } else {
-            totalSuccess += result.summary.success;
-            totalFailed += result.summary.failed;
-            for (let i = 0; i < batchTargets.length; i++) {
-              const record = batchTargets[i];
-              const syncResult = result.results[i];
-              if (syncResult && !syncResult.success) {
-                const httpCode = syncResult.httpStatus ? `[HTTP ${syncResult.httpStatus}] ` : '';
-                const apiMsg = syncResult.errorMessage || syncResult.error || "Error al sincronizar";
-                updateRecord(record.id, { statusMessage: `${httpCode}${apiMsg}` });
-              } else if (syncResult?.success) {
-                allSuccessfulOrders.push(record);
-              }
+            // result has one entry in results[] for the whole chunk
+            const syncResult = result.results[0];
+            if (syncResult && !syncResult.success) {
+              const httpCode = syncResult.httpStatus ? `[HTTP ${syncResult.httpStatus}] ` : '';
+              const apiMsg = syncResult.errorMessage || syncResult.error || "Error al sincronizar";
+              updateRecordsBatch(chunk.records.map((r: OCRecord) => ({
+                id: r.id,
+                updates: { statusMessage: `${httpCode}${apiMsg}` },
+              })));
+              totalFailed += chunk.records.length;
+            } else if (syncResult?.success) {
+              allSuccessfulOrders.push(...chunk.records);
+              totalSuccess += chunk.records.length;
             }
-            processedCount += batchTargets.length;
+            processedCount += chunk.records.length;
           }
           setProgress({ current: processedCount, total: toSync.length });
         }
@@ -607,60 +625,60 @@ export function useOCVerification() {
 
     setProgress({ current: processedCount, total: toSync.length });
 
-    // --- Final retry for network-failed sync batches (ECONNRESET / socket hang up) ---
-    if (!wasCancelled && syncNetworkRetryBatches.length > 0) {
-      const syncRetryTargets = syncNetworkRetryBatches.flat();
+    // --- Final retry for network-failed sync chunks (ECONNRESET / socket hang up) ---
+    if (!wasCancelled && syncNetworkRetryChunks.length > 0) {
+      const retryOCCount = syncNetworkRetryChunks.reduce((a, c) => a + c.records.length, 0);
       toast.info(
-        `Reintentando sincronización de ${syncRetryTargets.length} registros que fallaron por error de red...`,
+        `Reintentando sincronización de ${retryOCCount} registros que fallaron por error de red...`,
         { position: "bottom-left", duration: 5000 }
       );
       await delay(2000);
 
       const syncRetryResults = await Promise.allSettled(
-        syncNetworkRetryBatches.map(async (retryBatch, idx) => {
+        syncNetworkRetryChunks.map(async (chunk) => {
           try {
             const result = await synchronizeBatchMutation.mutateAsync({
-              orders: retryBatch.map(r => ({
-                buyerExternalCode: r.buyer_external_code,
-                purchaseOrderNumber: r.purchase_order_number,
+              batches: [{
+                buyerExternalCode: chunk.buyerCode,
+                purchaseOrderNumbers: chunk.ocNumbers,
                 sendEmails: true,
-              })),
+              }],
               clientKey: clientKey || undefined,
             });
-            return { retryBatch, result };
+            return { chunk, result };
           } catch (retryErr: any) {
-            return { retryBatch, error: retryErr };
+            return { chunk, error: retryErr };
           }
         })
       );
 
       for (const settled of syncRetryResults) {
         if (settled.status === "fulfilled") {
-          const { retryBatch, result, error } = settled.value as any;
+          const { chunk, result, error } = settled.value as any;
           if (error) {
             const retryErrMsg = error?.message || "Error";
             toast.error(`Reintento sync fallido: ${retryErrMsg}`, { position: "bottom-left", duration: 5000 });
-            updateRecordsBatch(retryBatch.map((r: OCRecord) => ({
+            updateRecordsBatch(chunk.records.map((r: OCRecord) => ({
               id: r.id,
               updates: { statusMessage: `Error reintento sync: ${retryErrMsg}` },
             })));
-            totalFailed += retryBatch.length;
+            totalFailed += chunk.records.length;
           } else {
-            totalSuccess += result.summary.success;
-            totalFailed += result.summary.failed;
-            for (let i = 0; i < retryBatch.length; i++) {
-              const record = retryBatch[i];
-              const syncResult = result.results[i];
-              if (syncResult?.success) {
-                allSuccessfulOrders.push(record);
-              } else if (syncResult && !syncResult.success) {
-                const httpCode = syncResult.httpStatus ? `[HTTP ${syncResult.httpStatus}] ` : '';
-                const apiMsg = syncResult.errorMessage || syncResult.error || "Error al sincronizar";
-                updateRecord(record.id, { statusMessage: `${httpCode}${apiMsg}` });
-              }
+            const syncResult = result.results[0];
+            if (syncResult?.success) {
+              allSuccessfulOrders.push(...chunk.records);
+              totalSuccess += chunk.records.length;
+            } else if (syncResult && !syncResult.success) {
+              const httpCode = syncResult.httpStatus ? `[HTTP ${syncResult.httpStatus}] ` : '';
+              const apiMsg = syncResult.errorMessage || syncResult.error || "Error al sincronizar";
+              updateRecordsBatch(chunk.records.map((r: OCRecord) => ({
+                id: r.id,
+                updates: { statusMessage: `${httpCode}${apiMsg}` },
+              })));
+              totalFailed += chunk.records.length;
             }
             if (result.summary.success > 0) {
-              toast.success(`Reintento sync exitoso: ${result.summary.success} registros sincronizados`, { position: "bottom-left", duration: 4000 });
+              toast.success(`Reintento sync exitoso: ${result.summary.success} lotes sincronizados`, { position: "bottom-left", duration: 4000 });
             }
           }
         }
@@ -676,7 +694,7 @@ export function useOCVerification() {
         { position: "bottom-left", duration: 10000 }
       );
     } else {
-      const batchMsg = totalBatches > 1 ? ` (${totalBatches} lotes de ${batchSize})` : "";
+      const batchMsg = totalBatches > 1 ? ` (${totalBatches} llamadas agrupadas por sociedad)` : "";
       if (totalSuccess === toSync.length) {
         toast.success(`${totalSuccess} de ${toSync.length} órdenes sincronizadas correctamente${batchMsg}`, { position: "bottom-left", duration: 5000 });
       } else if (totalSuccess > 0) {
