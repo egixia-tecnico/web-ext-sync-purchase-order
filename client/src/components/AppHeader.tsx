@@ -8,7 +8,7 @@
  */
 import { useThemeColor } from "@/contexts/ThemeColorContext";
 import { useOCSync } from "@/contexts/OCSyncContext";
-import { Settings2, RefreshCw, Wifi, WifiOff, Loader2, History, ChevronDown, Users, FileText } from "lucide-react";
+import { Settings2, RefreshCw, Wifi, WifiOff, Loader2, History, ChevronDown, Users, FileText, LogOut } from "lucide-react";
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
@@ -129,6 +129,19 @@ export default function AppHeader({ onHistoryClick, onLogsClick }: AppHeaderProp
               >
                 <History className="w-4 h-4 mr-2" />
                 Historial de Verificaciones
+              </DropdownMenuItem>
+
+              {/* Cambio de cliente - limpia sesión y redirige al formulario de key */}
+              <DropdownMenuItem
+                onClick={() => {
+                  sessionStorage.removeItem("clientKey");
+                  const baseUrl = window.location.origin + window.location.pathname;
+                  window.location.href = baseUrl;
+                }}
+                className="cursor-pointer text-amber-600 focus:text-amber-700 focus:bg-amber-50"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Cambio de cliente
               </DropdownMenuItem>
 
               <DropdownMenuSeparator />
