@@ -680,3 +680,12 @@
 - [x] Chips activos visibles fuera del panel, botón Limpiar filtros
 - [x] Búsqueda extendida incluye delivery_status
 - [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)
+
+## Modal bloqueante de falla de conexión (getToken)
+
+- [ ] Revisar CommunicationFailureDialog actual y flujo de error de getToken
+- [ ] Modal bloqueante: cuando getToken falla, mostrar ventana que bloquea la herramienta con mensaje claro
+- [ ] Mensaje: "No hay conexión con el servicio de autenticación. Por favor intente más tarde."
+- [ ] Botón "Reintentar" para que el usuario pueda volver a intentar manualmente
+- [ ] Bloquear todos los pasos del wizard mientras el modal está activo
+- [ ] Verificar TypeScript y tests

@@ -50,6 +50,21 @@ export default function Home() {
     };
   }, []);
 
+  // Retry handler: calls a lightweight tRPC endpoint to verify if the API/token is back online
+  const handleCommFailureRetry = async (): Promise<boolean> => {
+    try {
+      // Use fetch directly to call the tRPC endpoint without hooks
+      const res = await fetch(`/api/trpc/egixia.getBatchConfig?input=${encodeURIComponent(JSON.stringify({ json: { clientKey: clientKey || "" } }))}`, {
+        credentials: "include",
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      return !!(data?.result?.data?.json);
+    } catch {
+      return false;
+    }
+  };
+
   // Abrir modales automáticamente si returnPath contiene parámetros especiales
   // Esto ocurre cuando el usuario llega desde el magic link con openHistory=true o openLogs=true
   useEffect(() => {
@@ -247,11 +262,12 @@ export default function Home() {
         </div>
       </footer>
 
-      {/* Popup bloqueante de falla de comunicación */}
+      {/* Popup bloqueante de falla de comunicación - no se puede cerrar hasta que se restablezca la conexión */}
       <CommunicationFailureDialog
         open={commFailure.open}
         type={commFailure.type}
-        onClose={() => setCommFailure({ open: false, type: "token" })}
+        onRetry={handleCommFailureRetry}
+        onRetrySuccess={() => setCommFailure({ open: false, type: "token" })}
       />
     </div>
   );
