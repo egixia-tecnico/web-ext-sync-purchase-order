@@ -913,7 +913,7 @@ export const appRouter = router({
         orders: z.array(z.object({
           buyerExternalCode: z.string(),
           purchaseOrderNumber: z.string(),
-          sendEmails: z.boolean().default(false),
+          sendEmails: z.boolean().default(true),
         })),
         clientKey: z.string().optional(),
       }))

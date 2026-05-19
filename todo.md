@@ -736,3 +736,9 @@
 - [x] Agregar mensaje de finalización de sincronización con toast informativo antes de re-verificar
 - [x] Ejecutar re-verificación automática de todas las OCs sincronizadas exitosamente al finalizar
 - [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)
+
+## send_emails true + log 20 registros por tipo de servicio
+
+- [x] send_emails: cambiar a true por defecto en frontend y backend
+- [x] Log integraciones: mantener últimos 20 registros por tipo de servicio (excluyendo gettoken)
+- [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)

@@ -328,34 +328,47 @@ export async function deleteIntegrationLogsByClientKey(clientKey: string) {
 }
 
 /**
- * Retención de logs: 20 registros por estado (success / error / timeout) por cliente.
- * Total máximo: 60 registros por cliente.
+ * Retención de logs: 20 registros por tipo de servicio (serviceName) por cliente.
+ * Excluye registros de gettoken. Total máximo: 20 x cantidad de servicios distintos.
  */
 async function cleanOldIntegrationLogs(clientId: number) {
   const db = await getDb();
   if (!db) return;
 
-  const MAX_PER_STATUS = 20;
-  const STATUSES = ['success', 'error', 'timeout'];
+  const MAX_PER_SERVICE = 20;
+
+  // Obtener todos los serviceName distintos para este cliente (excluyendo gettoken)
+  const serviceNames = await db
+    .selectDistinct({ serviceName: integrationLogs.serviceName })
+    .from(integrationLogs)
+    .where(
+      and(
+        eq(integrationLogs.clientId, clientId),
+        sql`LOWER(${integrationLogs.serviceName}) NOT LIKE '%gettoken%'`,
+        sql`LOWER(${integrationLogs.serviceName}) NOT LIKE '%token%'`,
+        sql`LOWER(${integrationLogs.url}) NOT LIKE '%gettoken%'`
+      )
+    );
 
   const idsToDelete: number[] = [];
 
-  for (const statusValue of STATUSES) {
-    // Obtener todos los logs de este cliente y estado, ordenados por fecha desc
-    const logsForStatus = await db
+  for (const { serviceName } of serviceNames) {
+    if (!serviceName) continue;
+    // Obtener todos los logs de este cliente y servicio, ordenados por fecha desc
+    const logsForService = await db
       .select({ id: integrationLogs.id })
       .from(integrationLogs)
       .where(
         and(
           eq(integrationLogs.clientId, clientId),
-          eq(integrationLogs.status, statusValue)
+          eq(integrationLogs.serviceName, serviceName)
         )
       )
       .orderBy(desc(integrationLogs.createdAt));
 
-    // Si hay más de MAX_PER_STATUS, marcar los más antiguos para eliminar
-    if (logsForStatus.length > MAX_PER_STATUS) {
-      const toDelete = logsForStatus.slice(MAX_PER_STATUS).map(log => log.id);
+    // Si hay más de MAX_PER_SERVICE, marcar los más antiguos para eliminar
+    if (logsForService.length > MAX_PER_SERVICE) {
+      const toDelete = logsForService.slice(MAX_PER_SERVICE).map(log => log.id);
       idsToDelete.push(...toDelete);
     }
   }

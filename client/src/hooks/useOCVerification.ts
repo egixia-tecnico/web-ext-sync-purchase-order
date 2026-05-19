@@ -530,7 +530,7 @@ export function useOCVerification() {
               orders: batchTargets.map(r => ({
                 buyerExternalCode: r.buyer_external_code,
                 purchaseOrderNumber: r.purchase_order_number,
-                sendEmails: false,
+                sendEmails: true,
               })),
               clientKey: clientKey || undefined,
             });
@@ -625,7 +625,7 @@ export function useOCVerification() {
               orders: retryBatch.map(r => ({
                 buyerExternalCode: r.buyer_external_code,
                 purchaseOrderNumber: r.purchase_order_number,
-                sendEmails: false,
+                sendEmails: true,
               })),
               clientKey: clientKey || undefined,
             });
