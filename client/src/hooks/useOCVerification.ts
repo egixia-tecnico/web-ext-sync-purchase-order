@@ -690,6 +690,12 @@ export function useOCVerification() {
 
     // Re-verify synchronized orders to update their status (only if there were successes)
     if (allSuccessfulOrders.length > 0) {
+      toast.info(
+        `El proceso de sincronización ha finalizado. Verificando el estado actualizado de ${allSuccessfulOrders.length} órdenes en el portal...`,
+        { position: "bottom-left", duration: 6000 }
+      );
+      // Brief pause so the user reads the message before verification starts
+      await delay(2000);
       await verifyBatch(allSuccessfulOrders);
     }
 

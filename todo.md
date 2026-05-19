@@ -729,3 +729,10 @@
 - [x] Verificación OCs: acumular lotes que fallen por error de red y ejecutarlos como reintento al finalizar todos los grupos
 - [x] Sincronización OCs: mismo mecanismo de reintento final para lotes fallidos por error de red
 - [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)
+
+## Logs sincronización + Re-verificación automática post-sync
+
+- [x] Diagnosticar y corregir por qué la sincronización de OCs no genera registros en el log de integraciones
+- [x] Agregar mensaje de finalización de sincronización con toast informativo antes de re-verificar
+- [x] Ejecutar re-verificación automática de todas las OCs sincronizadas exitosamente al finalizar
+- [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)

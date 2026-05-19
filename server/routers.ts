@@ -320,7 +320,9 @@ async function callEgixiaApi(endpoint: string, method: "GET" | "POST" = "GET", b
     const executionTimeMs = Date.now() - startTime;
 
     // Save integration log for ALL endpoints (including gettoken)
-    const client = await getClientByKey(clientKey || "");
+    // Fallback: if clientKey is empty or not found, use active client
+    let client = clientKey ? await getClientByKey(clientKey) : null;
+    if (!client) client = await getActiveClient();
     if (client) {
       await saveIntegrationLog({
         clientId: client.id,
