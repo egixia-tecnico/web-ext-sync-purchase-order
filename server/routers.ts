@@ -530,6 +530,27 @@ export const appRouter = router({
 // apiConfig router removed - all configuration now managed through clients router
 
   egixia: router({
+    // Test token acquisition — called before each wizard operation to verify connectivity.
+    // If getToken fails, this returns { success: false, error: 'COMMUNICATION_FAILURE_TOKEN' }
+    // so the frontend can show the blocking modal before attempting any real operation.
+    testToken: publicProcedure
+      .input(z.object({ clientKey: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        try {
+          const credentials = await getClientCredentials(input.clientKey);
+          if (!credentials) {
+            return { success: false, error: "No hay configuración de API disponible. Configure un cliente primero." };
+          }
+          // Force a fresh token (bypass cache) by temporarily clearing it
+          cachedToken = null;
+          tokenExpiry = 0;
+          await getToken(credentials.baseUrl, credentials.userName, credentials.password, credentials.clientId, credentials.clientSecret);
+          return { success: true };
+        } catch (err: any) {
+          return { success: false, error: err.message || "COMMUNICATION_FAILURE_TOKEN" };
+        }
+      }),
+
     // Get batch configuration for a client (used by frontend to split requests)
     getBatchConfig: publicProcedure
       .input(z.object({ clientKey: z.string().optional() }))

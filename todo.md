@@ -689,3 +689,10 @@
 - [ ] Botón "Reintentar" para que el usuario pueda volver a intentar manualmente
 - [ ] Bloquear todos los pasos del wizard mientras el modal está activo
 - [ ] Verificar TypeScript y tests
+
+## Token explícito antes de cada operación del wizard
+
+- [ ] Backend: procedimiento testToken que solicita el token y retorna éxito/error con código HTTP
+- [ ] Frontend: llamar testToken antes de verificación de proveedores, verificación de OCs y sincronización
+- [ ] Si testToken falla → mostrar modal bloqueante inmediatamente, no continuar con la operación
+- [ ] Verificar TypeScript y tests

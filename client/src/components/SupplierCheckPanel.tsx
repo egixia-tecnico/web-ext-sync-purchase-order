@@ -41,6 +41,7 @@ export default function SupplierCheckPanel() {
   const hasStartedRef = useRef(false);
 
   const verifySuppliersMutation = trpc.egixia.verifySuppliersBatch.useMutation();
+  const testTokenMutation = trpc.egixia.testToken.useMutation();
 
   // Auto-start verification when component mounts (if not already completed)
   useEffect(() => {
@@ -56,6 +57,21 @@ export default function SupplierCheckPanel() {
     cancelRef.current = false;
     setIsCancelling(false);
     setIsProcessing(true);
+
+    // Step 0: Verify token connectivity before any API operation
+    try {
+      const tokenResult = await testTokenMutation.mutateAsync({ clientKey: clientKey || undefined });
+      if (!tokenResult.success) {
+        setIsProcessing(false);
+        // Show blocking communication failure modal
+        (window as any).__showCommFailure?.("token");
+        return;
+      }
+    } catch (err: any) {
+      setIsProcessing(false);
+      (window as any).__showCommFailure?.("token");
+      return;
+    }
 
     // Extract unique suppliers from all records
     const supplierMap = new Map<string, { providerExternalCode1: string; providerExternalCode2: string }>();

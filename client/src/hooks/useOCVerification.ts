@@ -31,6 +31,7 @@ export function useOCVerification() {
   const [isCancelling, setIsCancelling] = useState(false);
 
   const verifyBatchMutation = trpc.egixia.verifyPurchaseOrders.useMutation();
+  const testTokenMutation = trpc.egixia.testToken.useMutation();
   const batchConfigQuery = trpc.egixia.getBatchConfig.useQuery(
     { clientKey: clientKey || undefined },
     { enabled: !!clientKey, staleTime: 60000 }
@@ -51,6 +52,18 @@ export function useOCVerification() {
 
     cancelRef.current = false;
     setIsCancelling(false);
+
+    // Step 0: Verify token connectivity before starting verification
+    try {
+      const tokenResult = await testTokenMutation.mutateAsync({ clientKey: clientKey || undefined });
+      if (!tokenResult.success) {
+        (window as any).__showCommFailure?.("token");
+        return;
+      }
+    } catch (err: any) {
+      (window as any).__showCommFailure?.("token");
+      return;
+    }
 
     // Get batch config (from cache or defaults)
     const batchSize = batchConfigQuery.data?.batchSize ?? 10;
@@ -278,6 +291,18 @@ export function useOCVerification() {
 
     cancelRef.current = false;
     setIsCancelling(false);
+
+    // Step 0: Verify token connectivity before starting synchronization
+    try {
+      const tokenResult = await testTokenMutation.mutateAsync({ clientKey: clientKey || undefined });
+      if (!tokenResult.success) {
+        (window as any).__showCommFailure?.("token");
+        return { success: 0, failed: 0, skipped: 0, wasCancelled: false };
+      }
+    } catch (err: any) {
+      (window as any).__showCommFailure?.("token");
+      return { success: 0, failed: 0, skipped: 0, wasCancelled: false };
+    }
 
     // Get batch config
     const batchSize = batchConfigQuery.data?.batchSize ?? 10;
