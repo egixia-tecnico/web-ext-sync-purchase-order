@@ -2,7 +2,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { saveVerificationLog, getVerificationHistory, getClients, getClientById, getClientByKey, getActiveClient, createClient, updateClient, deleteClient, setActiveClient, createMagicLink, getMagicLinkByToken, markMagicLinkAsUsed, getIntegrationLogs, saveIntegrationLog, deleteIntegrationLogsByClientKey, extractServiceName } from "./db";
+import { saveVerificationLog, getVerificationHistory, getClients, getClientById, getClientByKey, getActiveClient, createClient, updateClient, deleteClient, setActiveClient, createMagicLink, getMagicLinkByToken, markMagicLinkAsUsed, getIntegrationLogs, saveIntegrationLog, deleteIntegrationLogsByClientKey, deleteIntegrationLogsBefore, extractServiceName } from "./db";
 import { sendMagicLinkEmail, isSendGridConfigured } from "./email";
 import axios from "axios";
 import { AXIOS_TIMEOUT_MS } from "@shared/const";
@@ -669,7 +669,6 @@ export const appRouter = router({
           buyerCode: z.string().optional(),
         })),
         clientKey: z.string().optional(),
-        isFirstBatch: z.boolean().optional(), // true = clean logs before starting
         isLastBatch: z.boolean().optional(),  // true = save verification summary
         globalSummary: z.object({
           total: z.number(),
@@ -680,11 +679,6 @@ export const appRouter = router({
         }).optional(),
       }))
       .mutation(async ({ input }) => {
-        // Clean integration logs only on first batch
-        if (input.isFirstBatch && input.clientKey) {
-          await deleteIntegrationLogsByClientKey(input.clientKey);
-        }
-
         console.log(`[Egixia] Verifying batch of ${input.orders.length} orders (grouped by sociedad, up to 40 per request)`);
 
         const results: any[] = [];
@@ -1342,6 +1336,16 @@ export const appRouter = router({
       .input(z.object({ clientKey: z.string() }))
       .mutation(async ({ input }) => {
         return await deleteIntegrationLogsByClientKey(input.clientKey);
+      }),
+
+    // Elimina logs anteriores o iguales a una fecha dada (se llama al cargar archivo)
+    deleteLogsBefore: publicProcedure
+      .input(z.object({
+        clientKey: z.string(),
+        beforeDate: z.date(),
+      }))
+      .mutation(async ({ input }) => {
+        return await deleteIntegrationLogsBefore(input.clientKey, input.beforeDate);
       }),
   }),
 });

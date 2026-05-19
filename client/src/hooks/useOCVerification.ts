@@ -161,7 +161,6 @@ export function useOCVerification() {
               buyerCode: r.buyer_external_code,
             })),
             clientKey: clientKey || undefined,
-            isFirstBatch: groupIdx === 0,
             isLastBatch: groupIdx === totalGroups - 1,
             globalSummary: groupIdx === totalGroups - 1 ? globalSummary : undefined,
           });
@@ -362,7 +361,6 @@ export function useOCVerification() {
                 buyerCode: r.buyer_external_code,
               })),
               clientKey: clientKey || undefined,
-              isFirstBatch: false,
               isLastBatch: true,
             });
             const updates: Array<{ id: string; updates: Partial<OCRecord> }> = [];

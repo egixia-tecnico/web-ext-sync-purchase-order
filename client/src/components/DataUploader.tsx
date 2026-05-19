@@ -12,13 +12,17 @@ import { useOCSync } from "@/contexts/OCSyncContext";
 import { parseFileData, parseManualInput, downloadTemplate } from "@/lib/file-parser";
 import { toast } from "sonner";
 import { Upload, FileSpreadsheet, Keyboard, X, FileCheck, AlertTriangle, FileUp, Download } from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import { useClientKey } from "@/contexts/ClientKeyContext";
 
 export default function DataUploader() {
   const { records, setRecords } = useOCSync();
+  const { clientKey } = useClientKey();
   const [isDragging, setIsDragging] = useState(false);
   const [manualText, setManualText] = useState("");
   const [fileName, setFileName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const deleteLogsBeforeMutation = trpc.logs.deleteLogsBefore.useMutation();
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -51,10 +55,15 @@ export default function DataUploader() {
     }
 
     try {
+      const loadedAt = new Date();
       const parsed = await parseFileData(file);
       setRecords(parsed);
       setFileName(file.name);
       toast.success(`${parsed.length} órdenes de compra cargadas desde ${file.name}. Todos los registros seleccionados.`, { position: "bottom-left" });
+      // Borrar logs anteriores a la fecha de carga en paralelo (sin bloquear la UI)
+      if (clientKey) {
+        deleteLogsBeforeMutation.mutate({ clientKey, beforeDate: loadedAt });
+      }
     } catch (err: any) {
       toast.error(err?.message || "Error al procesar el archivo", { position: "bottom-left" });
     }
@@ -70,8 +79,13 @@ export default function DataUploader() {
       toast.error("No se encontraron registros válidos. Use formato: comprador, proveedor, nro_oc (uno por línea)", { position: "bottom-left" });
       return;
     }
+    const loadedAt = new Date();
     setRecords(parsed);
     toast.success(`${parsed.length} órdenes de compra cargadas. Todos los registros seleccionados.`, { position: "bottom-left" });
+    // Borrar logs anteriores a la fecha de carga en paralelo (sin bloquear la UI)
+    if (clientKey) {
+      deleteLogsBeforeMutation.mutate({ clientKey, beforeDate: loadedAt });
+    }
   };
 
   const handleClear = () => {

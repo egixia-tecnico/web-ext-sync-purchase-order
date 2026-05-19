@@ -1,4 +1,4 @@
-import { eq, desc, sql, inArray, and } from "drizzle-orm";
+import { eq, desc, sql, inArray, and, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, verificationLogs, clients, InsertClient, Client, magicLinks, InsertMagicLink, integrationLogs } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -307,6 +307,36 @@ export async function getIntegrationLogs(clientId: number, options?: { limit?: n
     .offset(offset);
 
   return { logs, total };
+}
+
+/**
+ * Elimina los logs de integración de un cliente anteriores o iguales a una fecha dada.
+ * Se llama en paralelo al cargar un archivo nuevo, borrando solo los registros previos
+ * a la fecha/hora de carga del archivo.
+ */
+export async function deleteIntegrationLogsBefore(clientKey: string, beforeDate: Date) {
+  const db = await getDb();
+  if (!db) return false;
+
+  try {
+    const client = await getClientByKey(clientKey);
+    if (!client) {
+      console.warn(`[Database] Client not found for key: ${clientKey}`);
+      return false;
+    }
+
+    await db.delete(integrationLogs).where(
+      and(
+        eq(integrationLogs.clientId, client.id),
+        lte(integrationLogs.createdAt, beforeDate)
+      )
+    );
+    console.log(`[Database] Deleted integration logs before ${beforeDate.toISOString()} for client: ${client.name}`);
+    return true;
+  } catch (error) {
+    console.error("[Database] Failed to delete integration logs before date:", error);
+    return false;
+  }
 }
 
 export async function deleteIntegrationLogsByClientKey(clientKey: string) {
