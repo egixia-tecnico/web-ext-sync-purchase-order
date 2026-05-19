@@ -323,18 +323,25 @@ export default function ResultsTable() {
       );
     }
 
-    // Always sort: non-synced first, synced last
+    // In step 3: selectable records first, blocked (supplier_not_exists) last.
+    // In all other steps: use STATUS_SORT_PRIORITY as usual.
     result.sort((a, b) => {
-      const aPri = STATUS_SORT_PRIORITY[a.status || "pending"] ?? 4;
-      const bPri = STATUS_SORT_PRIORITY[b.status || "pending"] ?? 4;
-      if (aPri !== bPri) return aPri - bPri;
+      if (currentStep === 3) {
+        const aBlocked = a.supplierExists === false ? 1 : 0;
+        const bBlocked = b.supplierExists === false ? 1 : 0;
+        if (aBlocked !== bBlocked) return aBlocked - bBlocked;
+      } else {
+        const aPri = STATUS_SORT_PRIORITY[a.status || "pending"] ?? 4;
+        const bPri = STATUS_SORT_PRIORITY[b.status || "pending"] ?? 4;
+        if (aPri !== bPri) return aPri - bPri;
+      }
       const aVal = String(a[sortField] || "");
       const bVal = String(b[sortField] || "");
       return sortDir === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
     });
 
     return result;
-  }, [records, searchTerm, activeKPIFilter, activeQuickFilters, quickFilters, sortField, sortDir]);
+  }, [records, searchTerm, activeKPIFilter, activeQuickFilters, quickFilters, sortField, sortDir, currentStep]);
 
   const paginatedRecords = useMemo(() => {
     return filteredRecords.slice(page * pageSize, (page + 1) * pageSize);
@@ -572,8 +579,30 @@ export default function ResultsTable() {
                 const deliveryStatus = record.delivery_status || record.portalData?.deliveryStatus;
                 const deliveryBadge = getDeliveryBadge(deliveryStatus);
 
+                // In step 3: show a separator row before the first blocked record
+                const prevRecord = idx > 0 ? paginatedRecords[idx - 1] : null;
+                const showBlockedSeparator =
+                  currentStep === 3 &&
+                  supplierNotExists &&
+                  (prevRecord === null || prevRecord.supplierExists !== false);
+
                 return (
-                  <motion.tr
+                  <>
+                    {/* Separator before first blocked record in step 3 */}
+                    {showBlockedSeparator && (
+                      <tr key={`sep-${record.id}`}>
+                        <td
+                          colSpan={99}
+                          className="px-3 py-1.5 bg-muted/40 border-y border-border/60"
+                        >
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                            <UserX className="w-3 h-3" />
+                            Proveedores no registrados — no se pueden seleccionar
+                          </span>
+                        </td>
+                      </tr>
+                    )}
+                    <motion.tr
                     key={record.id}
                     initial={{ opacity: 0, x: -5 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -704,6 +733,7 @@ export default function ResultsTable() {
                       )}
                     </td>
                   </motion.tr>
+                  </>
                 );
               })}
             </AnimatePresence>
