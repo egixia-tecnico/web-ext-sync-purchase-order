@@ -680,11 +680,6 @@ export const appRouter = router({
         }).optional(),
       }))
       .mutation(async ({ input }) => {
-        // Clean integration logs only on first batch
-        if (input.isFirstBatch && input.clientKey) {
-          await deleteIntegrationLogsByClientKey(input.clientKey);
-        }
-
         console.log(`[Egixia] Verifying batch of ${input.orders.length} orders (grouped by sociedad, up to 40 per request)`);
 
         const results: any[] = [];
