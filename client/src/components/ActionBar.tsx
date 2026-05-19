@@ -42,11 +42,7 @@ const STEP_CONTEXT: Record<number, { icon: React.ReactNode; text: string; color:
     text: "Consultando el portal de proveedores para verificar si cada OC existe. Las OCs de proveedores no encontrados están excluidas.",
     color: "text-blue-600 bg-blue-50 border-blue-200",
   },
-  4: {
-    icon: <Info className="w-3.5 h-3.5" />,
-    text: "Revisá los resultados. Las OCs no encontradas están preseleccionadas para sincronizar. Podés ajustar la selección antes de continuar.",
-    color: "text-amber-700 bg-amber-50 border-amber-200",
-  },
+
   5: {
     icon: <RefreshCw className="w-3.5 h-3.5 animate-spin" />,
     text: "Enviando las OCs seleccionadas al portal de proveedores para su sincronización. No cierres esta ventana.",
