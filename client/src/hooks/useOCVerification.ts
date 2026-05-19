@@ -149,8 +149,15 @@ export function useOCVerification() {
             continue;
           }
 
-          // Determine if the OC is canceled (canceled field has a truthy value)
-          const isCanceled = apiResult.status === "found" && apiResult.canceled && String(apiResult.canceled).trim() !== "" && String(apiResult.canceled).trim() !== "0" && String(apiResult.canceled).toLowerCase() !== "false";
+          // Determine if the OC is canceled.
+          // Only mark as canceled if the field has a meaningful truthy value.
+          // Values "NO", "", null, undefined, "0", "false" → NOT canceled (synced).
+          const canceledStr = apiResult.canceled != null ? String(apiResult.canceled).trim().toUpperCase() : "";
+          const isCanceled = apiResult.status === "found"
+            && canceledStr !== ""
+            && canceledStr !== "NO"
+            && canceledStr !== "0"
+            && canceledStr !== "FALSE";
 
           let resolvedStatus: OCRecord["status"];
           let resolvedMessage: string;
