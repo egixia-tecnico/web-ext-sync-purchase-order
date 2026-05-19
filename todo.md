@@ -713,3 +713,7 @@
 - [x] KPI Anuladas: nuevo indicador antes de "Proveedor no existe" con conteo de OCs anuladas
 - [x] Reportes CSV: asegurar que cada paso exporte exactamente las columnas visibles del grid completas
 - [x] Verificar TypeScript y tests (24/24 tests, 0 errores TS)
+
+## Botón Volver al inicio en verificación de proveedores
+
+- [x] Agregar botón "Volver al inicio" en SupplierCheckPanel (paso 2) para regresar al paso 1 y cargar un archivo diferente

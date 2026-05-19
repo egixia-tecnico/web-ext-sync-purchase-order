@@ -18,7 +18,7 @@ import { downloadCSV } from "@/lib/file-parser";
 import { toast } from "sonner";
 import {
   Users, CheckCircle2, XCircle, AlertTriangle, ArrowRight,
-  Loader2, RefreshCw, Building2, Download, Info,
+  Loader2, RefreshCw, Building2, Download, Info, ArrowLeft,
 } from "lucide-react";
 
 const SUPPLIER_BATCH_SIZE = 50;
@@ -188,6 +188,10 @@ export default function SupplierCheckPanel() {
 
   const handleContinue = () => {
     setCurrentStep(3);
+  };
+
+  const handleBackToStart = () => {
+    setCurrentStep(1);
   };
 
   const handleExportProviders = () => {
@@ -369,6 +373,15 @@ export default function SupplierCheckPanel() {
             {/* Action buttons */}
             <div className="flex items-center justify-between pt-1">
               <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleBackToStart}
+                  className="text-xs gap-1.5"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  Volver al inicio
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"
