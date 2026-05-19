@@ -21,7 +21,9 @@ import {
   Loader2, RefreshCw, Building2, Download, Info, ArrowLeft,
 } from "lucide-react";
 
-const SUPPLIER_BATCH_SIZE = 50;
+const SUPPLIER_BATCH_SIZE = 50;  // Max suppliers per API call (unchanged)
+const PARALLEL_GROUP_SIZE = 4;   // Max concurrent API calls per group
+const GROUP_DELAY_MS = 2000;     // Delay between groups (ms)
 
 interface SupplierResult {
   providerExternalCode1: string;
@@ -85,41 +87,60 @@ export default function SupplierCheckPanel() {
     }
 
     const uniqueSuppliers = Array.from(supplierMap.values());
-    const totalBatches = Math.ceil(uniqueSuppliers.length / SUPPLIER_BATCH_SIZE);
+
+    // Build individual API call batches (up to SUPPLIER_BATCH_SIZE each)
+    const batches: Array<typeof uniqueSuppliers> = [];
+    for (let i = 0; i < uniqueSuppliers.length; i += SUPPLIER_BATCH_SIZE) {
+      batches.push(uniqueSuppliers.slice(i, i + SUPPLIER_BATCH_SIZE));
+    }
+
+    // Group batches into parallel groups of PARALLEL_GROUP_SIZE
+    const parallelGroups: Array<typeof batches> = [];
+    for (let i = 0; i < batches.length; i += PARALLEL_GROUP_SIZE) {
+      parallelGroups.push(batches.slice(i, i + PARALLEL_GROUP_SIZE));
+    }
 
     setProgress({ current: 0, total: uniqueSuppliers.length });
 
     const allResults: SupplierResult[] = [];
     let processedCount = 0;
 
-    for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
+    for (let groupIdx = 0; groupIdx < parallelGroups.length; groupIdx++) {
       if (cancelRef.current) break;
 
-      const batchStart = batchIdx * SUPPLIER_BATCH_SIZE;
-      const batchEnd = Math.min(batchStart + SUPPLIER_BATCH_SIZE, uniqueSuppliers.length);
-      const batch = uniqueSuppliers.slice(batchStart, batchEnd);
+      const group = parallelGroups[groupIdx];
 
-      try {
-        const result = await verifySuppliersMutation.mutateAsync({
-          suppliers: batch,
-          clientKey: clientKey || undefined,
-        });
-
-        allResults.push(...result.results);
-        processedCount += batch.length;
-        setProgress({ current: processedCount, total: uniqueSuppliers.length });
-      } catch (error: any) {
-        // On API error, mark all in batch as error
-        for (const s of batch) {
-          allResults.push({
+      // Execute all batches in this group in parallel
+      const groupPromises = group.map(async (batch) => {
+        try {
+          const result = await verifySuppliersMutation.mutateAsync({
+            suppliers: batch,
+            clientKey: clientKey || undefined,
+          });
+          return result.results;
+        } catch (error: any) {
+          // On API error, mark all in batch as error
+          return batch.map(s => ({
             providerExternalCode1: s.providerExternalCode1,
             providerExternalCode2: s.providerExternalCode2,
             exists: false,
-            error: error.message,
-          });
+            error: error.message as string,
+          }));
         }
-        processedCount += batch.length;
-        setProgress({ current: processedCount, total: uniqueSuppliers.length });
+      });
+
+      // Wait for all batches in this group to complete
+      const groupResults = await Promise.all(groupPromises);
+
+      for (const batchResults of groupResults) {
+        allResults.push(...batchResults);
+        processedCount += batchResults.length;
+      }
+      setProgress({ current: processedCount, total: uniqueSuppliers.length });
+
+      // Wait 2 seconds before processing the next group (skip delay after last group)
+      if (groupIdx < parallelGroups.length - 1 && !cancelRef.current) {
+        await new Promise(resolve => setTimeout(resolve, GROUP_DELAY_MS));
       }
     }
 
