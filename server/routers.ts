@@ -611,20 +611,24 @@ export const appRouter = router({
           // A supplier exists if it appears in outlist_provider AND provider_exists === true.
           // If not in the list OR provider_exists === false → does not exist.
           const responseList: any[] = data?.outlist_provider || [];
-          const existsMap = new Map<string, boolean>();
+
+          // Build a set of all codes that exist in the portal.
+          // A code is considered "existing" if it appears in provider_external_code_1 OR
+          // provider_external_code_2 of any item where provider_exists === true.
+          const existingCodes = new Set<string>();
           for (const item of responseList) {
-            const k1 = String(item.provider_external_code_1 || "").trim();
-            const k2 = String(item.provider_external_code_2 || "").trim();
-            // Index by code1|code2 (code2 may be empty string)
-            existsMap.set(`${k1}|${k2}`, item.provider_exists === true);
+            if (item.provider_exists !== true) continue;
+            const c1 = String(item.provider_external_code_1 || "").trim();
+            const c2 = String(item.provider_external_code_2 || "").trim();
+            if (c1) existingCodes.add(c1);
+            if (c2) existingCodes.add(c2);
           }
 
           for (const supplier of input.suppliers) {
             const k1 = supplier.providerExternalCode1.trim();
             const k2 = (supplier.providerExternalCode2 || "").trim();
-            const key = `${k1}|${k2}`;
-            // If not in response list → does not exist
-            const existsValue = existsMap.has(key) ? existsMap.get(key)! : false;
+            // Exists if code1 OR code2 is found in the portal response
+            const existsValue = existingCodes.has(k1) || (k2 !== "" && existingCodes.has(k2));
             results.push({
               providerExternalCode1: supplier.providerExternalCode1,
               providerExternalCode2: supplier.providerExternalCode2 || "",
