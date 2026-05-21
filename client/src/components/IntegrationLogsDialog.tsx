@@ -5,10 +5,11 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import { useClientKey } from "@/contexts/ClientKeyContext";
-import { Loader2, Copy, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Loader2, Copy, CheckCircle2, XCircle, Clock, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 
 interface IntegrationLogsDialogProps {
   open: boolean;
@@ -23,6 +24,21 @@ export default function IntegrationLogsDialog({ open, onOpenChange }: Integratio
   );
 
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const filteredLogs = useMemo(() => {
+    if (!logs?.logs) return [];
+    if (!searchTerm.trim()) return logs.logs;
+    const term = searchTerm.toLowerCase();
+    return logs.logs.filter(
+      (log) =>
+        log.url.toLowerCase().includes(term) ||
+        log.requestBody?.toLowerCase().includes(term) ||
+        log.responseBody?.toLowerCase().includes(term) ||
+        (log as any).errorDetail?.toLowerCase().includes(term) ||
+        (log as any).serviceName?.toLowerCase().includes(term)
+    );
+  }, [logs, searchTerm]);
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -64,6 +80,16 @@ export default function IntegrationLogsDialog({ open, onOpenChange }: Integratio
           <p className="text-sm text-muted-foreground">
             Últimas 20 peticiones a la API de Egixia (excluyendo solicitudes de token)
           </p>
+          {/* Buscador */}
+          <div className="relative mt-3">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Buscar en URL, body petición/respuesta, error, servicio..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-9 h-9 text-xs"
+            />
+          </div>
         </DialogHeader>
 
         {isLoading && (
@@ -72,15 +98,15 @@ export default function IntegrationLogsDialog({ open, onOpenChange }: Integratio
           </div>
         )}
 
-        {!isLoading && (!logs || logs.logs.length === 0) && (
+        {!isLoading && filteredLogs.length === 0 && (
           <div className="text-center py-12 text-muted-foreground">
-            No hay logs de integraciones disponibles
+            {searchTerm.trim() ? "No se encontraron logs que coincidan con la búsqueda" : "No hay logs de integraciones disponibles"}
           </div>
         )}
 
-        {!isLoading && logs && logs.logs.length > 0 && (
+        {!isLoading && filteredLogs.length > 0 && (
           <div className="space-y-3">
-            {logs.logs.map((log) => (
+            {filteredLogs.map((log) => (
               <div key={log.id} className="border rounded-lg p-4 space-y-3">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 space-y-2">

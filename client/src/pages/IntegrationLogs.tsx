@@ -222,7 +222,7 @@ export default function IntegrationLogs() {
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
             <Input
-              placeholder="Buscar en URL, servicio, error..."
+              placeholder="Buscar en URL, servicio, body petición/respuesta, error..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-9 h-9 text-xs"
