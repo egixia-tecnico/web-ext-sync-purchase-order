@@ -1,1 +1,0 @@
-ALTER TABLE `magic_links` ADD `returnPath` varchar(512);

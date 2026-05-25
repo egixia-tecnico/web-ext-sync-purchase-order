@@ -1,1 +1,0 @@
-ALTER TABLE `verification_logs` ADD `clientId` int;
