@@ -612,23 +612,31 @@ export const appRouter = router({
           // If not in the list OR provider_exists === false → does not exist.
           const responseList: any[] = data?.outlist_provider || [];
 
-          // Build a set of all codes that exist in the portal.
-          // A code is considered "existing" if it appears in provider_external_code_1 OR
-          // provider_external_code_2 of any item where provider_exists === true.
-          const existingCodes = new Set<string>();
+          // Build two separate sets: one for code1 values, one for code2 values.
+          // A supplier exists if:
+          //   - The sent code1 matches a response item's provider_external_code_1 with provider_exists=true, OR
+          //   - The sent code2 matches a response item's provider_external_code_2 with provider_exists=true.
+          // Cross-column matching is NOT allowed (code1 sent must match code1 in response, same for code2).
+          const existingByCode1 = new Set<string>(); // codes found in resp.provider_external_code_1
+          const existingByCode2 = new Set<string>(); // codes found in resp.provider_external_code_2
           for (const item of responseList) {
             if (item.provider_exists !== true) continue;
             const c1 = String(item.provider_external_code_1 || "").trim();
             const c2 = String(item.provider_external_code_2 || "").trim();
-            if (c1) existingCodes.add(c1);
-            if (c2) existingCodes.add(c2);
+            if (c1) existingByCode1.add(c1);
+            if (c2) existingByCode2.add(c2);
           }
 
           for (const supplier of input.suppliers) {
             const k1 = supplier.providerExternalCode1.trim();
             const k2 = (supplier.providerExternalCode2 || "").trim();
-            // Exists if code1 OR code2 is found in the portal response
-            const existsValue = existingCodes.has(k1) || (k2 !== "" && existingCodes.has(k2));
+            // Exists if:
+            //   - code1 was sent AND matches a resp.code1, OR
+            //   - code2 was sent AND matches a resp.code2
+            // If both are sent, either match is sufficient.
+            const code1Match = k1 !== "" && existingByCode1.has(k1);
+            const code2Match = k2 !== "" && existingByCode2.has(k2);
+            const existsValue = code1Match || code2Match;
             results.push({
               providerExternalCode1: supplier.providerExternalCode1,
               providerExternalCode2: supplier.providerExternalCode2 || "",

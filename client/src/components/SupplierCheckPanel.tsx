@@ -75,13 +75,40 @@ export default function SupplierCheckPanel() {
       return;
     }
 
-    // Extract unique suppliers from all records
+    // ─── STEP 1: Separate records with both codes empty (immediate not-exists) ───
+    const emptyCodeRecords = records.filter(rec => {
+      const c1 = (rec.provider_external_code_1 || rec.provider_external_code || "").trim();
+      const c2 = (rec.provider_external_code_2 || "").trim();
+      return !c1 && !c2;
+    });
+
+    // Mark empty-code records immediately as supplier_not_exists
+    if (emptyCodeRecords.length > 0) {
+      const emptyUpdates = emptyCodeRecords.map(rec => ({
+        id: rec.id,
+        updates: {
+          supplierExists: false as boolean,
+          supplierCheckError: undefined as string | undefined,
+          status: "supplier_not_exists" as const,
+          statusMessage: "Proveedor no existe",
+        },
+      }));
+      updateRecordsBatch(emptyUpdates);
+    }
+
+    // ─── STEP 2: Extract unique suppliers (code1|code2 as dedup key) ───
+    // Three valid modalities:
+    //   (A) code1 filled, code2 empty
+    //   (B) code1 empty, code2 filled
+    //   (C) both filled
+    // Records with both empty are already handled above.
     const supplierMap = new Map<string, { providerExternalCode1: string; providerExternalCode2: string }>();
     for (const rec of records) {
-      const code1 = rec.provider_external_code_1 || rec.provider_external_code || "";
-      const code2 = rec.provider_external_code_2 || "";
+      const code1 = (rec.provider_external_code_1 || rec.provider_external_code || "").trim();
+      const code2 = (rec.provider_external_code_2 || "").trim();
+      if (!code1 && !code2) continue; // already handled
       const key = `${code1}|${code2}`;
-      if (code1 && !supplierMap.has(key)) {
+      if (!supplierMap.has(key)) {
         supplierMap.set(key, { providerExternalCode1: code1, providerExternalCode2: code2 });
       }
     }
@@ -144,18 +171,21 @@ export default function SupplierCheckPanel() {
       }
     }
 
-    // Build lookup map for quick access
+    // ─── STEP 3: Build lookup map keyed by code1|code2 (same as dedup key) ───
     const resultMap = new Map<string, SupplierResult>();
     for (const res of allResults) {
       const key = `${res.providerExternalCode1}|${res.providerExternalCode2}`;
       resultMap.set(key, res);
     }
 
-    // Update each record with supplier check result
-    // If the supplier does not exist → assign status 'supplier_not_exists' so the KPI counts it
+    // ─── STEP 4: Apply results to each record ───
     const batchUpdates = records.map(rec => {
-      const code1 = rec.provider_external_code_1 || rec.provider_external_code || "";
-      const code2 = rec.provider_external_code_2 || "";
+      const code1 = (rec.provider_external_code_1 || rec.provider_external_code || "").trim();
+      const code2 = (rec.provider_external_code_2 || "").trim();
+
+      // Records with both empty were already marked above; skip re-processing
+      if (!code1 && !code2) return { id: rec.id, updates: {} };
+
       const key = `${code1}|${code2}`;
       const res = resultMap.get(key);
 
@@ -176,13 +206,14 @@ export default function SupplierCheckPanel() {
 
     updateRecordsBatch(batchUpdates);
 
-    // Calculate final summary
+    // ─── STEP 5: Calculate final summary (includes empty-code records as not-exists) ───
     const existsCount = allResults.filter(r => r.exists).length;
-    const notExistsCount = allResults.filter(r => !r.exists && !r.error).length;
+    const notExistsFromApi = allResults.filter(r => !r.exists && !r.error).length;
+    const notExistsCount = notExistsFromApi + emptyCodeRecords.length;
     const errorCount = allResults.filter(r => !!r.error).length;
 
     const summary = {
-      total: uniqueSuppliers.length,
+      total: uniqueSuppliers.length + emptyCodeRecords.length,
       exists: existsCount,
       notExists: notExistsCount,
       errors: errorCount,
