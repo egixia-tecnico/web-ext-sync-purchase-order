@@ -1,15 +1,25 @@
-/**
- * IntegrationLogsDialog - Muestra los últimos 20 logs de integraciones
- * Accesible desde el menú de configuración (engranaje)
- */
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { trpc } from "@/lib/trpc";
+import { useQuery } from "@tanstack/react-query";
+import { getIntegrationLogs } from "@/lib/api";
 import { useClientKey } from "@/contexts/ClientKeyContext";
 import { Loader2, Copy, CheckCircle2, XCircle, Clock, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useState, useMemo } from "react";
+
+interface IntegrationLog {
+  id: number;
+  status: string;
+  url: string;
+  created_at: string;
+  auth_prefix: string | null;
+  token: string | null;
+  request_body: string | null;
+  response_body: string | null;
+  error_detail: string | null;
+  service_name: string | null;
+}
 
 interface IntegrationLogsDialogProps {
   open: boolean;
@@ -18,27 +28,29 @@ interface IntegrationLogsDialogProps {
 
 export default function IntegrationLogsDialog({ open, onOpenChange }: IntegrationLogsDialogProps) {
   const { clientKey } = useClientKey();
-  const { data: logs, isLoading } = trpc.logs.getIntegrationLogs.useQuery(
-    { clientKey: clientKey || "" },
-    { enabled: !!clientKey && open }
-  );
+  const { data, isLoading } = useQuery({
+    queryKey: ["integrationLogsDialog", clientKey],
+    queryFn: () => getIntegrationLogs(clientKey || "", { limit: 20 }),
+    enabled: !!clientKey && open,
+  });
 
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
 
+  const rawLogs = (data?.logs || []) as IntegrationLog[];
+
   const filteredLogs = useMemo(() => {
-    if (!logs?.logs) return [];
-    if (!searchTerm.trim()) return logs.logs;
+    if (!searchTerm.trim()) return rawLogs;
     const term = searchTerm.toLowerCase();
-    return logs.logs.filter(
+    return rawLogs.filter(
       (log) =>
         log.url.toLowerCase().includes(term) ||
-        log.requestBody?.toLowerCase().includes(term) ||
-        log.responseBody?.toLowerCase().includes(term) ||
-        (log as any).errorDetail?.toLowerCase().includes(term) ||
-        (log as any).serviceName?.toLowerCase().includes(term)
+        log.request_body?.toLowerCase().includes(term) ||
+        log.response_body?.toLowerCase().includes(term) ||
+        log.error_detail?.toLowerCase().includes(term) ||
+        log.service_name?.toLowerCase().includes(term)
     );
-  }, [logs, searchTerm]);
+  }, [rawLogs, searchTerm]);
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -47,29 +59,26 @@ export default function IntegrationLogsDialog({ open, onOpenChange }: Integratio
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "success":
-        return <CheckCircle2 className="w-4 h-4 text-green-600" />;
-      case "error":
-        return <XCircle className="w-4 h-4 text-red-600" />;
-      case "timeout":
-        return <Clock className="w-4 h-4 text-orange-600" />;
-      default:
-        return null;
+      case "success": return <CheckCircle2 className="w-4 h-4 text-green-600" />;
+      case "error": return <XCircle className="w-4 h-4 text-red-600" />;
+      case "timeout": return <Clock className="w-4 h-4 text-orange-600" />;
+      default: return null;
     }
   };
 
   const getStatusBadge = (status: string) => {
-    const baseClasses = "px-2 py-0.5 rounded-full text-xs font-medium inline-flex items-center gap-1";
+    const base = "px-2 py-0.5 rounded-full text-xs font-medium inline-flex items-center gap-1";
     switch (status) {
-      case "success":
-        return <span className={`${baseClasses} bg-green-100 text-green-700`}>{getStatusIcon(status)} Éxito</span>;
-      case "error":
-        return <span className={`${baseClasses} bg-red-100 text-red-700`}>{getStatusIcon(status)} Error</span>;
-      case "timeout":
-        return <span className={`${baseClasses} bg-orange-100 text-orange-700`}>{getStatusIcon(status)} Timeout</span>;
-      default:
-        return <span className={`${baseClasses} bg-gray-100 text-gray-700`}>{status}</span>;
+      case "success": return <span className={`${base} bg-green-100 text-green-700`}>{getStatusIcon(status)} Éxito</span>;
+      case "error": return <span className={`${base} bg-red-100 text-red-700`}>{getStatusIcon(status)} Error</span>;
+      case "timeout": return <span className={`${base} bg-orange-100 text-orange-700`}>{getStatusIcon(status)} Timeout</span>;
+      default: return <span className={`${base} bg-gray-100 text-gray-700`}>{status}</span>;
     }
+  };
+
+  const safeParseJson = (str: string | null | undefined) => {
+    if (!str) return null;
+    try { return JSON.stringify(JSON.parse(str), null, 2); } catch { return str; }
   };
 
   return (
@@ -80,7 +89,6 @@ export default function IntegrationLogsDialog({ open, onOpenChange }: Integratio
           <p className="text-sm text-muted-foreground">
             Últimas 20 peticiones a la API de Egixia (excluyendo solicitudes de token)
           </p>
-          {/* Buscador */}
           <div className="relative mt-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
             <Input
@@ -113,7 +121,7 @@ export default function IntegrationLogsDialog({ open, onOpenChange }: Integratio
                     <div className="flex items-center gap-2">
                       {getStatusBadge(log.status)}
                       <span className="text-xs text-muted-foreground">
-                        {new Date(log.createdAt).toLocaleString("es-CO", {
+                        {new Date(log.created_at).toLocaleString("es-CO", {
                           dateStyle: "short",
                           timeStyle: "medium",
                         })}
@@ -123,12 +131,7 @@ export default function IntegrationLogsDialog({ open, onOpenChange }: Integratio
                       <code className="text-xs bg-muted px-2 py-1 rounded flex-1 break-all">
                         {log.url}
                       </code>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => copyToClipboard(log.url, "URL")}
-                        className="shrink-0"
-                      >
+                      <Button variant="ghost" size="sm" onClick={() => copyToClipboard(log.url, "URL")} className="shrink-0">
                         <Copy className="w-3.5 h-3.5" />
                       </Button>
                     </div>
@@ -144,59 +147,44 @@ export default function IntegrationLogsDialog({ open, onOpenChange }: Integratio
 
                 {expandedRow === log.id && (
                   <div className="space-y-3 pt-3 border-t">
-                    {/* Token */}
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-xs font-semibold text-muted-foreground">Token</span>
                         {log.token && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => copyToClipboard(log.token || "", "Token")}
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => copyToClipboard(log.token || "", "Token")}>
                             <Copy className="w-3.5 h-3.5" />
                           </Button>
                         )}
                       </div>
                       <code className="text-xs bg-muted px-2 py-1 rounded block break-all">
-                        {log.authPrefix} {log.token || "N/A"}
+                        {log.auth_prefix} {log.token || "N/A"}
                       </code>
                     </div>
 
-                    {/* Request Body */}
-                    {log.requestBody && (
+                    {log.request_body && (
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-xs font-semibold text-muted-foreground">Body / Parámetros</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => copyToClipboard(log.requestBody || "", "Body")}
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => copyToClipboard(log.request_body || "", "Body")}>
                             <Copy className="w-3.5 h-3.5" />
                           </Button>
                         </div>
                         <pre className="text-xs bg-muted px-3 py-2 rounded overflow-auto max-h-40">
-                          {JSON.stringify(JSON.parse(log.requestBody), null, 2)}
+                          {safeParseJson(log.request_body)}
                         </pre>
                       </div>
                     )}
 
-                    {/* Response Body */}
-                    {log.responseBody && (
+                    {log.response_body && (
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-xs font-semibold text-muted-foreground">Respuesta</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => copyToClipboard(log.responseBody || "", "Respuesta")}
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => copyToClipboard(log.response_body || "", "Respuesta")}>
                             <Copy className="w-3.5 h-3.5" />
                           </Button>
                         </div>
                         <pre className="text-xs bg-muted px-3 py-2 rounded overflow-auto max-h-40">
-                          {JSON.stringify(JSON.parse(log.responseBody), null, 2)}
+                          {safeParseJson(log.response_body)}
                         </pre>
                       </div>
                     )}

@@ -1,9 +1,6 @@
-/**
- * ClientDialog - Diálogo para crear o editar clientes
- * Formulario completo con validación y encriptación automática
- */
 import { useEffect, useState } from "react";
-import { trpc } from "@/lib/trpc";
+import { useQuery } from "@tanstack/react-query";
+import { getClientById, createClient, updateClient, testClientConnection } from "@/lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,19 +31,16 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
     isActive: false,
   });
 
-  const { data: existingClient, isLoading: loadingClient } = trpc.clients.getById.useQuery(
-    { id: clientId! },
-    { enabled: !!clientId && open }
-  );
+  const { data: existingClient, isLoading: loadingClient } = useQuery({
+    queryKey: ["client", clientId],
+    queryFn: () => getClientById(clientId!),
+    enabled: !!clientId && open,
+  });
 
-  const createMutation = trpc.clients.create.useMutation();
-  const updateMutation = trpc.clients.update.useMutation();
-  const testConnectionMutation = trpc.clients.testConnection.useMutation();
-
+  const [isSaving, setIsSaving] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionTested, setConnectionTested] = useState(false);
   const [showDebugDialog, setShowDebugDialog] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
   const [testSuccess, setTestSuccess] = useState(false);
 
   useEffect(() => {
@@ -66,7 +60,6 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
         isActive: existingClient.isActive,
       });
     } else if (!clientId) {
-      // Reset form for new client
       setFormData({
         clientKey: "",
         name: "",
@@ -86,30 +79,35 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
+    setIsSaving(true);
     try {
       if (clientId) {
-        await updateMutation.mutateAsync({ id: clientId, ...formData });
+        await updateClient(clientId, formData);
         toast.success("Cliente actualizado correctamente", { position: "bottom-left" });
       } else {
-        await createMutation.mutateAsync(formData);
+        await createClient(formData);
         toast.success("Cliente creado correctamente", { position: "bottom-left" });
       }
       onClose(true);
-    } catch (error: any) {
-      toast.error(error.message || "Error al guardar cliente", { position: "bottom-left" });
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Error al guardar cliente", { position: "bottom-left" });
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleChange = (field: string, value: string | boolean | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    // Reset connection test when credentials change
     if (["baseUrl", "userName", "password", "clientId", "clientSecret"].includes(field)) {
       setConnectionTested(false);
     }
   };
 
   const handleTestConnection = async () => {
+    if (!clientId) {
+      toast.error("Guarde el cliente primero para habilitar la prueba de conexión", { position: "bottom-left" });
+      return;
+    }
     if (!formData.baseUrl || !formData.userName || !formData.password || !formData.clientId || !formData.clientSecret) {
       toast.error("Complete todos los campos de conexión antes de probar", { position: "bottom-left" });
       return;
@@ -117,30 +115,18 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
 
     setTestingConnection(true);
     try {
-      const result = await testConnectionMutation.mutateAsync({
-        baseUrl: formData.baseUrl,
-        userName: formData.userName,
-        password: formData.password,
-        clientId: formData.clientId,
-        clientSecret: formData.clientSecret,
-      });
-
+      const result = await testClientConnection(formData.clientKey);
       if (result.success) {
-        toast.success(result.message, { position: "bottom-left" });
+        toast.success("Conexión exitosa", { position: "bottom-left" });
         setConnectionTested(true);
         setTestSuccess(true);
       } else {
-        toast.error(result.message, { position: "bottom-left" });
+        toast.error(result.error || "Error de conexión", { position: "bottom-left" });
         setConnectionTested(false);
         setTestSuccess(false);
       }
-      
-      if (result.debug) {
-        setDebugInfo(result.debug);
-        setShowDebugDialog(true);
-      }
-    } catch (error: any) {
-      toast.error(error.message || "Error al probar conexión", { position: "bottom-left" });
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Error al probar conexión", { position: "bottom-left" });
       setConnectionTested(false);
       setTestSuccess(false);
     } finally {
@@ -170,7 +156,7 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
                   id="clientKey"
                   value={formData.clientKey}
                   onChange={(e) => handleChange("clientKey", e.target.value)}
-                  placeholder="manuelita" 
+                  placeholder="manuelita"
                   pattern="[a-zA-Z0-9_-]+"
                   title="Solo letras, números, guiones y guiones bajos"
                   required
@@ -227,9 +213,9 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
               </div>
 
               <div>
-                <Label htmlFor="clientId">Client ID *</Label>
+                <Label htmlFor="clientIdField">Client ID *</Label>
                 <Input
-                  id="clientId"
+                  id="clientIdField"
                   value={formData.clientId}
                   onChange={(e) => handleChange("clientId", e.target.value)}
                   placeholder="a4559cf615a14a20..."
@@ -278,7 +264,7 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
                   min={1}
                   max={100}
                   value={formData.batchSize}
-                  onChange={(e) => handleChange("batchSize", Math.max(1, Math.min(100, parseInt(e.target.value) || 1)) as any)}
+                  onChange={(e) => handleChange("batchSize", Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
                   required
                 />
                 <p className="text-xs text-muted-foreground mt-1">
@@ -294,7 +280,7 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
                   min={1}
                   max={60}
                   value={formData.batchDelaySeconds}
-                  onChange={(e) => handleChange("batchDelaySeconds", Math.max(1, Math.min(60, parseInt(e.target.value) || 1)) as any)}
+                  onChange={(e) => handleChange("batchDelaySeconds", Math.max(1, Math.min(60, parseInt(e.target.value) || 1)))}
                   required
                 />
                 <p className="text-xs text-muted-foreground mt-1">
@@ -336,8 +322,9 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
                 type="button"
                 variant="outline"
                 onClick={handleTestConnection}
-                disabled={testingConnection || !formData.baseUrl || !formData.userName || !formData.password || !formData.clientId || !formData.clientSecret}
+                disabled={testingConnection || !clientId}
                 className={connectionTested ? "border-green-500 text-green-700" : ""}
+                title={!clientId ? "Guarde el cliente primero para habilitar esta opción" : undefined}
               >
                 {testingConnection ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -351,24 +338,19 @@ export default function ClientDialog({ open, onClose, clientId }: ClientDialogPr
                 <Button type="button" variant="outline" onClick={() => onClose(false)}>
                   Cancelar
                 </Button>
-                <Button
-                  type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                >
-                  {(createMutation.isPending || updateMutation.isPending) && (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  )}
+                <Button type="submit" disabled={isSaving}>
+                  {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                   {clientId ? "Actualizar" : "Crear"}
                 </Button>
               </div>
             </div>
           </form>
         )}
-        
+
         <TestConnectionDebugDialog
           open={showDebugDialog}
           onOpenChange={setShowDebugDialog}
-          debug={debugInfo}
+          debug={null}
           success={testSuccess}
         />
       </DialogContent>

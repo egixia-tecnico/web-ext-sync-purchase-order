@@ -1,11 +1,7 @@
-/**
- * ClientsManagement - Página de administración de clientes
- * Permite crear, editar, eliminar y activar clientes
- * Los datos sensibles se muestran enmascarados en la lista
- */
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { trpc } from "@/lib/trpc";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { checkAdminSession, listClients, setActiveClient, deleteClientById } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Plus, Edit, Trash2, Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -31,33 +27,32 @@ import {
 
 export default function ClientsManagement() {
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const [showDialog, setShowDialog] = useState(false);
   const [editingClientId, setEditingClientId] = useState<number | null>(null);
   const [deletingClientId, setDeletingClientId] = useState<number | null>(null);
 
-  // IMPORTANTE: Todas las queries y mutations DEBEN estar antes de cualquier early return
-  // para cumplir con las reglas de hooks de React
-  const { data: adminSession, isLoading: sessionLoading } = trpc.auth.checkAdminSession.useQuery(undefined, {
+  const { data: adminSession, isLoading: sessionLoading } = useQuery({
+    queryKey: ["adminSession"],
+    queryFn: checkAdminSession,
     retry: false,
     staleTime: 30_000,
   });
-  const { data: clients, isLoading: clientsLoading, refetch } = trpc.clients.list.useQuery(undefined, {
-    // Solo cargar clientes si hay sesión admin activa
+
+  const { data: clients, isLoading: clientsLoading, refetch } = useQuery({
+    queryKey: ["clients"],
+    queryFn: listClients,
     enabled: adminSession?.isAdmin === true,
   });
-  const setActiveMutation = trpc.clients.setActive.useMutation();
-  const deleteMutation = trpc.clients.delete.useMutation();
 
   const isLoading = sessionLoading || clientsLoading;
 
-  // Redirigir al login si no hay sesión admin activa
   useEffect(() => {
     if (!sessionLoading && adminSession?.isAdmin !== true) {
       setLocation("/admin/login?returnPath=%2Fclients");
     }
   }, [sessionLoading, adminSession, setLocation]);
 
-  // Show loading while checking session or fetching clients
   if (sessionLoading || (adminSession?.isAdmin && clientsLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -78,24 +73,23 @@ export default function ClientsManagement() {
 
   const handleSetActive = async (id: number) => {
     try {
-      await setActiveMutation.mutateAsync({ id });
+      await setActiveClient(id);
       toast.success("Cliente activado correctamente", { position: "bottom-left" });
       refetch();
-    } catch (error: any) {
-      toast.error(error.message || "Error al activar cliente", { position: "bottom-left" });
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Error al activar cliente", { position: "bottom-left" });
     }
   };
 
   const handleDelete = async () => {
     if (!deletingClientId) return;
-    
     try {
-      await deleteMutation.mutateAsync({ id: deletingClientId });
+      await deleteClientById(deletingClientId);
       toast.success("Cliente eliminado correctamente", { position: "bottom-left" });
       setDeletingClientId(null);
       refetch();
-    } catch (error: any) {
-      toast.error(error.message || "Error al eliminar cliente", { position: "bottom-left" });
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Error al eliminar cliente", { position: "bottom-left" });
     }
   };
 
@@ -103,7 +97,7 @@ export default function ClientsManagement() {
     setShowDialog(false);
     setEditingClientId(null);
     if (success) {
-      refetch();
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
     }
   };
 

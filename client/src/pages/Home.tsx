@@ -8,7 +8,6 @@
  * Step 5 (Exportar): KPIs + Tabla actualizada (sin checkboxes) + Exportar final
  */
 import { useEffect, useRef, useState } from "react";
-import { useAuth } from "@/_core/hooks/useAuth";
 import { motion } from "framer-motion";
 import AppHeader from "@/components/AppHeader";
 
@@ -23,7 +22,7 @@ import ResultsTable from "@/components/ResultsTable";
 import CommunicationFailureDialog from "@/components/CommunicationFailureDialog";
 import { useOCSync } from "@/contexts/OCSyncContext";
 import { useThemeColor } from "@/contexts/ThemeColorContext";
-import { trpc } from "@/lib/trpc";
+import { testToken } from "@/lib/api";
 import { toast } from "sonner";
 import { Zap, Database, BarChart3, ArrowRight, AlertCircle, RefreshCw } from "lucide-react";
 import { useClientKey } from "@/contexts/ClientKeyContext";
@@ -32,7 +31,6 @@ import ClientKeyRequired from "@/pages/ClientKeyRequired";
 import ClientKeyInvalid from "@/pages/ClientKeyInvalid";
 
 export default function Home() {
-  let { user, loading, error, isAuthenticated, logout } = useAuth();
   const { clientKey, clientData, loading: clientLoading } = useClientKey();
   const [, navigate] = useLocation();
 
@@ -50,16 +48,10 @@ export default function Home() {
     };
   }, []);
 
-  // Retry handler: calls a lightweight tRPC endpoint to verify if the API/token is back online
   const handleCommFailureRetry = async (): Promise<boolean> => {
     try {
-      // Use fetch directly to call the tRPC endpoint without hooks
-      const res = await fetch(`/api/trpc/egixia.getBatchConfig?input=${encodeURIComponent(JSON.stringify({ json: { clientKey: clientKey || "" } }))}`, {
-        credentials: "include",
-      });
-      if (!res.ok) return false;
-      const data = await res.json();
-      return !!(data?.result?.data?.json);
+      const result = await testToken(clientKey || "");
+      return result.success === true;
     } catch {
       return false;
     }

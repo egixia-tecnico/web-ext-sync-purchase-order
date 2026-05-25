@@ -1,5 +1,6 @@
 import { createContext, ReactNode, useContext, useEffect, useState } from "react";
-import { trpc } from "@/lib/trpc";
+import { useQuery } from "@tanstack/react-query";
+import { getClientByKey } from "@/lib/api";
 
 interface ThemeColorContextType {
   primaryColor: string;
@@ -50,10 +51,11 @@ export function ThemeColorProvider({ children }: { children: ReactNode }) {
   // Load client color from URL clientKey parameter (optional)
   const params = new URLSearchParams(window.location.search);
   const clientKey = params.get("clientKey") || sessionStorage.getItem("clientKey");
-  const { data: clientByKey } = trpc.clients.getByKey.useQuery(
-    { clientKey: clientKey! },
-    { enabled: !!clientKey }
-  );
+  const { data: clientByKey } = useQuery({
+    queryKey: ["clientByKey", clientKey],
+    queryFn: () => getClientByKey(clientKey!),
+    enabled: !!clientKey,
+  });
 
   useEffect(() => {
     // Priority 1: URL parameter (for embedding)

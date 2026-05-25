@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { trpc } from "@/lib/trpc";
+import { useQuery } from "@tanstack/react-query";
+import { getClientByKey } from "@/lib/api";
 
 interface ClientKeyContextType {
   clientKey: string | null;
@@ -21,39 +22,42 @@ const ClientKeyContext = createContext<ClientKeyContextType>({
 
 export function ClientKeyProvider({ children }: { children: ReactNode }) {
   const [clientKey, setClientKey] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [resolving, setResolving] = useState(true);
 
-  // Read clientKey from URL on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const keyFromUrl = params.get("clientKey");
-    
     if (keyFromUrl) {
       setClientKey(keyFromUrl);
       sessionStorage.setItem("clientKey", keyFromUrl);
     } else {
-      // Try to load from sessionStorage
       const keyFromSession = sessionStorage.getItem("clientKey");
-      if (keyFromSession) {
-        setClientKey(keyFromSession);
-      }
+      if (keyFromSession) setClientKey(keyFromSession);
     }
-    
-    setLoading(false);
+    setResolving(false);
   }, []);
 
-  // Fetch client data by clientKey
-  const { data: clientData } = trpc.clients.getByKey.useQuery(
-    { clientKey: clientKey! },
-    { enabled: !!clientKey }
-  );
+  const { data: clientData, isLoading: clientLoading } = useQuery({
+    queryKey: ["client", clientKey],
+    queryFn: () => getClientByKey(clientKey!),
+    enabled: !!clientKey && !resolving,
+    staleTime: 60_000,
+  });
 
   return (
     <ClientKeyContext.Provider
       value={{
         clientKey,
-        clientData: clientData || null,
-        loading,
+        clientData: clientData
+          ? {
+              id: clientData.id,
+              name: clientData.name,
+              primaryColor: clientData.primaryColor,
+              syncRules: clientData.syncRules,
+              isActive: clientData.isActive,
+            }
+          : null,
+        loading: resolving || clientLoading,
       }}
     >
       {children}

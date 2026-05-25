@@ -1,8 +1,4 @@
-/**
- * DataUploader - Zona de carga de datos por archivo o entrada manual
- * Design: "Operational Clarity" - zona de drop con borde dashed animado
- * Incluye botón de descarga de plantilla .xlsx con formato texto
- */
+// DataUploader - Zona de carga de datos por archivo o entrada manual
 import { useState, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,7 +8,7 @@ import { useOCSync } from "@/contexts/OCSyncContext";
 import { parseFileData, parseManualInput, downloadTemplate } from "@/lib/file-parser";
 import { toast } from "sonner";
 import { Upload, FileSpreadsheet, Keyboard, X, FileCheck, AlertTriangle, FileUp, Download } from "lucide-react";
-import { trpc } from "@/lib/trpc";
+import { deleteLogsBeforeDate } from "@/lib/api";
 import { useClientKey } from "@/contexts/ClientKeyContext";
 
 export default function DataUploader() {
@@ -22,25 +18,14 @@ export default function DataUploader() {
   const [manualText, setManualText] = useState("");
   const [fileName, setFileName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const deleteLogsBeforeMutation = trpc.logs.deleteLogsBefore.useMutation();
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  }, []);
-
+  const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); }, []);
+  const handleDragLeave = useCallback((e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); }, []);
   const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
+    e.preventDefault(); setIsDragging(false);
     const file = e.dataTransfer.files[0];
     if (file) await processFile(file);
   }, []);
-
   const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) await processFile(file);
@@ -48,32 +33,24 @@ export default function DataUploader() {
 
   const processFile = async (file: File) => {
     const ext = file.name.split(".").pop()?.toLowerCase();
-    
     if (!["xlsx", "xls", "csv"].includes(ext || "")) {
       toast.error("Formato no soportado. Use archivos .xlsx, .xls o .csv", { position: "bottom-left" });
       return;
     }
-
     try {
       const loadedAt = new Date();
       const parsed = await parseFileData(file);
       setRecords(parsed);
       setFileName(file.name);
       toast.success(`${parsed.length} órdenes de compra cargadas desde ${file.name}. Todos los registros seleccionados.`, { position: "bottom-left" });
-      // Borrar logs anteriores a la fecha de carga en paralelo (sin bloquear la UI)
-      if (clientKey) {
-        deleteLogsBeforeMutation.mutate({ clientKey, beforeDate: loadedAt });
-      }
-    } catch (err: any) {
-      toast.error(err?.message || "Error al procesar el archivo", { position: "bottom-left" });
+      if (clientKey) deleteLogsBeforeDate(clientKey, loadedAt).catch(() => {});
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al procesar el archivo", { position: "bottom-left" });
     }
   };
 
   const handleManualSubmit = () => {
-    if (!manualText.trim()) {
-      toast.error("Ingrese datos para procesar", { position: "bottom-left" });
-      return;
-    }
+    if (!manualText.trim()) { toast.error("Ingrese datos para procesar", { position: "bottom-left" }); return; }
     const parsed = parseManualInput(manualText);
     if (parsed.length === 0) {
       toast.error("No se encontraron registros válidos. Use formato: comprador, proveedor, nro_oc (uno por línea)", { position: "bottom-left" });
@@ -82,52 +59,34 @@ export default function DataUploader() {
     const loadedAt = new Date();
     setRecords(parsed);
     toast.success(`${parsed.length} órdenes de compra cargadas. Todos los registros seleccionados.`, { position: "bottom-left" });
-    // Borrar logs anteriores a la fecha de carga en paralelo (sin bloquear la UI)
-    if (clientKey) {
-      deleteLogsBeforeMutation.mutate({ clientKey, beforeDate: loadedAt });
-    }
+    if (clientKey) deleteLogsBeforeDate(clientKey, loadedAt).catch(() => {});
   };
 
   const handleClear = () => {
-    setRecords([]);
-    setFileName("");
-    setManualText("");
+    setRecords([]); setFileName(""); setManualText("");
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleDownloadTemplate = () => {
-    try {
-      downloadTemplate();
-      toast.success("Plantilla descargada correctamente", { position: "bottom-left" });
-    } catch (err: any) {
-      toast.error("Error al generar la plantilla", { position: "bottom-left" });
-    }
+    try { downloadTemplate(); toast.success("Plantilla descargada correctamente", { position: "bottom-left" }); }
+    catch { toast.error("Error al generar la plantilla", { position: "bottom-left" }); }
   };
 
   if (records.length > 0) {
     return (
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-card rounded-xl border shadow-sm p-4"
-      >
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card rounded-xl border shadow-sm p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
               <FileCheck className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <p className="text-sm font-medium text-card-foreground">
-                {records.length} órdenes de compra cargadas
-              </p>
-              {fileName && (
-                <p className="text-xs text-muted-foreground font-mono">{fileName}</p>
-              )}
+              <p className="text-sm font-medium text-card-foreground">{records.length} órdenes de compra cargadas</p>
+              {fileName && <p className="text-xs text-muted-foreground font-mono">{fileName}</p>}
             </div>
           </div>
           <Button variant="ghost" size="sm" onClick={handleClear} className="text-muted-foreground hover:text-destructive">
-            <X className="w-4 h-4 mr-1" />
-            Limpiar
+            <X className="w-4 h-4 mr-1" />Limpiar
           </Button>
         </div>
       </motion.div>
@@ -135,114 +94,60 @@ export default function DataUploader() {
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="bg-card rounded-xl border shadow-sm overflow-hidden"
-    >
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="bg-card rounded-xl border shadow-sm overflow-hidden">
       <Tabs defaultValue="file" className="w-full">
         <div className="border-b px-4 pt-3">
           <TabsList className="bg-transparent h-auto p-0 gap-4">
-            <TabsTrigger
-              value="file"
-              className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none pb-2 px-1 text-sm"
-            >
-              <FileSpreadsheet className="w-4 h-4 mr-1.5" />
-              Cargar archivo
+            <TabsTrigger value="file" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none pb-2 px-1 text-sm">
+              <FileSpreadsheet className="w-4 h-4 mr-1.5" />Cargar archivo
             </TabsTrigger>
-            <TabsTrigger
-              value="manual"
-              className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none pb-2 px-1 text-sm"
-            >
-              <Keyboard className="w-4 h-4 mr-1.5" />
-              Entrada manual
+            <TabsTrigger value="manual" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none pb-2 px-1 text-sm">
+              <Keyboard className="w-4 h-4 mr-1.5" />Entrada manual
             </TabsTrigger>
           </TabsList>
         </div>
-
         <TabsContent value="file" className="p-4 mt-0">
-          <div
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className={`
-              relative border-2 border-dashed rounded-xl p-8 text-center cursor-pointer
-              transition-all duration-300 ease-out
-              ${isDragging
-                ? "border-primary bg-primary/5 scale-[1.01]"
-                : "border-border hover:border-primary/40 hover:bg-muted/30"
-              }
-            `}
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              onChange={handleFileSelect}
-              className="hidden"
-            />
+          <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()}
+            className={`relative border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-300 ease-out ${isDragging ? "border-primary bg-primary/5 scale-[1.01]" : "border-border hover:border-primary/40 hover:bg-muted/30"}`}>
+            <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFileSelect} className="hidden" />
             <div className="flex flex-col items-center gap-3">
               <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
                 <FileUp className="w-8 h-8 text-primary/60" />
               </div>
               <div>
-                <p className="text-sm font-medium text-card-foreground">
-                  {isDragging ? "Suelte el archivo aquí" : "Arrastre un archivo o haga clic para seleccionar"}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Formatos soportados: .xlsx, .xls, .csv
-                </p>
+                <p className="text-sm font-medium text-card-foreground">{isDragging ? "Suelte el archivo aquí" : "Arrastre un archivo o haga clic para seleccionar"}</p>
+                <p className="text-xs text-muted-foreground mt-1">Formatos soportados: .xlsx, .xls, .csv</p>
               </div>
             </div>
           </div>
-
-          {/* Template download + column info */}
           <div className="mt-3 flex flex-col gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDownloadTemplate();
-              }}
-              className="w-full gap-2 text-sm border-primary/30 text-primary hover:bg-primary/5"
-            >
-              <Download className="w-4 h-4" />
-              Descargar plantilla Excel (.xlsx)
+            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleDownloadTemplate(); }} className="w-full gap-2 text-sm border-primary/30 text-primary hover:bg-primary/5">
+              <Download className="w-4 h-4" />Descargar plantilla Excel (.xlsx)
             </Button>
-
             <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
               <div className="flex gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                 <div className="text-xs text-amber-800">
                   <p className="font-medium">Columnas requeridas (formato texto):</p>
                   <p className="mt-0.5">
-                    <span className="font-mono bg-amber-100 px-1 rounded">buyer_external_code</span> (o codigo_comprador),{" "}
-                    <span className="font-mono bg-amber-100 px-1 rounded">provider_external_code_1</span> (o codigo_proveedor_1),{" "}
-                    <span className="font-mono bg-amber-100 px-1 rounded">provider_external_code_2</span> (o codigo_proveedor_2),{" "}
-                    <span className="font-mono bg-amber-100 px-1 rounded">purchase_order_number</span> (o numero_oc)
+                    <span className="font-mono bg-amber-100 px-1 rounded">buyer_external_code</span>,{" "}
+                    <span className="font-mono bg-amber-100 px-1 rounded">provider_external_code_1</span>,{" "}
+                    <span className="font-mono bg-amber-100 px-1 rounded">provider_external_code_2</span>,{" "}
+                    <span className="font-mono bg-amber-100 px-1 rounded">purchase_order_number</span>
                   </p>
-                  <p className="mt-1 text-amber-600">
-                    Todas las columnas deben estar en formato texto para evitar pérdida de ceros a la izquierda.
-                  </p>
+                  <p className="mt-1 text-amber-600">Todas las columnas deben estar en formato texto para evitar pérdida de ceros a la izquierda.</p>
                 </div>
               </div>
             </div>
           </div>
         </TabsContent>
-
         <TabsContent value="manual" className="p-4 mt-0">
           <Textarea
-            placeholder={"Ingrese los datos separados por coma, tab o pipe (uno por línea):\n\nFormato: codigo_comprador, codigo_proveedor, numero_oc\n\nEjemplo:\n0100, 1222748, 3300293553\n0100, 1221267, 3300293554\n0230, 5001234, 4500012345"}
-            value={manualText}
-            onChange={(e) => setManualText(e.target.value)}
-            className="min-h-[180px] font-mono text-xs"
+            placeholder={"Ingrese los datos separados por coma, tab o pipe (uno por línea):\n\nFormato: codigo_comprador, codigo_proveedor, numero_oc\n\nEjemplo:\n0100, 1222748, 3300293553\n0100, 1221267, 3300293554"}
+            value={manualText} onChange={(e) => setManualText(e.target.value)} className="min-h-[180px] font-mono text-xs"
           />
           <Button onClick={handleManualSubmit} className="mt-3 w-full">
-            <Upload className="w-4 h-4 mr-2" />
-            Cargar datos
+            <Upload className="w-4 h-4 mr-2" />Cargar datos
           </Button>
         </TabsContent>
       </Tabs>

@@ -1,11 +1,6 @@
-/**
- * IntegrationLogs - Página completa de logs de integraciones del backend
- * Muestra datos crudos: método HTTP, URL, headers, request body, response body,
- * raw response, HTTP status code, tiempo de ejecución, servicio, error detail
- * Con filtros por estado, paginación y detalle expandible
- */
 import { useState, useMemo, useEffect } from "react";
-import { trpc } from "@/lib/trpc";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { checkAdminSession, getIntegrationLogs, clearIntegrationLogs } from "@/lib/api";
 import { useClientKey } from "@/contexts/ClientKeyContext";
 import { useThemeColor } from "@/contexts/ThemeColorContext";
 import {
@@ -19,8 +14,26 @@ import { Link, useLocation } from "wouter";
 
 const PAGE_SIZE = 25;
 
+interface IntegrationLog {
+  id: number;
+  client_id: number;
+  status: string;
+  http_method: string | null;
+  http_status_code: number | null;
+  service_name: string | null;
+  execution_time_ms: number | null;
+  url: string;
+  created_at: string;
+  error_detail: string | null;
+  request_headers: string | null;
+  request_body: string | null;
+  response_body: string | null;
+  raw_response: string | null;
+  auth_prefix: string | null;
+  token: string | null;
+}
+
 export default function IntegrationLogs() {
-  // ─── ALL HOOKS MUST BE DECLARED BEFORE ANY CONDITIONAL RETURN ───
   const { clientKey } = useClientKey();
   const { primaryRgb } = useThemeColor();
   const { r, g, b } = primaryRgb;
@@ -31,62 +44,60 @@ export default function IntegrationLogs() {
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Verificar sesión admin
-  const { data: adminSession, isLoading: adminLoading } = trpc.auth.checkAdminSession.useQuery(undefined, {
+  const { data: adminSession, isLoading: adminLoading } = useQuery({
+    queryKey: ["adminSession"],
+    queryFn: checkAdminSession,
     retry: false,
     staleTime: 30_000,
   });
 
-  // Query de logs (se ejecuta solo si es admin y hay clientKey)
   const isAdmin = adminSession?.isAdmin === true;
-  const { data, isLoading, refetch } = trpc.logs.getIntegrationLogs.useQuery(
-    {
-      clientKey: clientKey || "",
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ["integrationLogs", clientKey, page, statusFilter],
+    queryFn: () => getIntegrationLogs(clientKey || "", {
       limit: PAGE_SIZE,
       offset: page * PAGE_SIZE,
       status: statusFilter,
-    },
-    { enabled: !!clientKey && isAdmin, refetchOnWindowFocus: false }
-  );
+    }),
+    enabled: !!clientKey && isAdmin,
+    refetchOnWindowFocus: false,
+  });
 
-  const clearLogsMutation = trpc.logs.clearLogs.useMutation({
+  const clearLogsMutation = useMutation({
+    mutationFn: () => clearIntegrationLogs(clientKey || ""),
     onSuccess: () => {
       toast.success("Logs eliminados correctamente");
       refetch();
     },
-    onError: (err) => {
+    onError: (err: Error) => {
       toast.error(`Error al eliminar logs: ${err.message}`);
     },
   });
 
-  const logs = data?.logs || [];
+  const logs = (data?.logs || []) as IntegrationLog[];
   const total = data?.total || 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
-  // Filter by search term (client-side on current page)
   const filteredLogs = useMemo(() => {
     if (!searchTerm.trim()) return logs;
     const term = searchTerm.toLowerCase();
     return logs.filter(
       (log) =>
         log.url.toLowerCase().includes(term) ||
-        log.serviceName?.toLowerCase().includes(term) ||
-        log.errorDetail?.toLowerCase().includes(term) ||
-        log.requestBody?.toLowerCase().includes(term) ||
-        log.responseBody?.toLowerCase().includes(term)
+        log.service_name?.toLowerCase().includes(term) ||
+        log.error_detail?.toLowerCase().includes(term) ||
+        log.request_body?.toLowerCase().includes(term) ||
+        log.response_body?.toLowerCase().includes(term)
     );
   }, [logs, searchTerm]);
 
-  // Redirigir a login si no es admin (después de todos los hooks)
   useEffect(() => {
     if (!adminLoading && !isAdmin) {
       navigate(`/admin/login?returnPath=${encodeURIComponent("/logs?clientKey=" + (clientKey || ""))}`);
     }
   }, [adminLoading, isAdmin, navigate, clientKey]);
 
-  // ─── CONDITIONAL RETURNS (after all hooks) ───
-
-  // Mostrar loading mientras verifica sesión
   if (adminLoading || !isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -97,8 +108,6 @@ export default function IntegrationLogs() {
       </div>
     );
   }
-
-  // ─── HELPER FUNCTIONS ───
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -136,7 +145,8 @@ export default function IntegrationLogs() {
     return <span className={`px-2 py-0.5 rounded text-xs font-mono font-bold ${color}`}>{code}</span>;
   };
 
-  const getMethodBadge = (method: string) => {
+  const getMethodBadge = (method: string | null) => {
+    if (!method) return null;
     const color = method === "GET" ? "text-blue-700 bg-blue-50" :
                   method === "POST" ? "text-purple-700 bg-purple-50" :
                   "text-gray-700 bg-gray-50";
@@ -145,13 +155,12 @@ export default function IntegrationLogs() {
 
   const handleClearLogs = () => {
     if (confirm("¿Está seguro de eliminar todos los logs de integración? Esta acción no se puede deshacer.")) {
-      clearLogsMutation.mutate({ clientKey: clientKey || "" });
+      clearLogsMutation.mutate();
     }
   };
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="border-b bg-card">
         <div className="container py-4">
           <div className="flex items-center justify-between">
@@ -192,10 +201,8 @@ export default function IntegrationLogs() {
         </div>
       </header>
 
-      {/* Filters */}
       <div className="container py-4">
         <div className="flex flex-wrap items-center gap-3">
-          {/* Status filter tabs */}
           <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
             <Filter className="w-3.5 h-3.5 text-muted-foreground ml-2" />
             {[
@@ -218,7 +225,6 @@ export default function IntegrationLogs() {
             ))}
           </div>
 
-          {/* Search */}
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
             <Input
@@ -231,7 +237,6 @@ export default function IntegrationLogs() {
         </div>
       </div>
 
-      {/* Content */}
       <div className="container pb-8">
         {isLoading && (
           <div className="flex items-center justify-center py-20">
@@ -256,48 +261,41 @@ export default function IntegrationLogs() {
                   expandedRow === log.id ? "border-border bg-card shadow-sm" : "hover:bg-muted/30"
                 }`}
               >
-                {/* Summary row */}
                 <div
                   className="flex items-center gap-3 px-4 py-3 cursor-pointer"
                   onClick={() => setExpandedRow(expandedRow === log.id ? null : log.id)}
                 >
-                  {/* Status */}
                   <div className="w-20 shrink-0">
                     {getStatusBadge(log.status)}
                   </div>
 
-                  {/* Method + HTTP Status */}
                   <div className="flex items-center gap-2 w-24 shrink-0">
-                    {getMethodBadge(log.httpMethod || "?")}
-                    {getHttpStatusBadge(log.httpStatusCode)}
+                    {getMethodBadge(log.http_method)}
+                    {getHttpStatusBadge(log.http_status_code)}
                   </div>
 
-                  {/* Service name */}
                   <div className="w-48 shrink-0">
                     <span className="text-xs font-mono font-medium text-foreground truncate block">
-                      {log.serviceName || "—"}
+                      {log.service_name || "—"}
                     </span>
                   </div>
 
-                  {/* Execution time */}
                   <div className="w-20 shrink-0 flex items-center gap-1">
                     <Timer className="w-3 h-3 text-muted-foreground" />
                     <span className="text-xs text-muted-foreground font-mono">
-                      {log.executionTimeMs ? `${(log.executionTimeMs / 1000).toFixed(1)}s` : "—"}
+                      {log.execution_time_ms ? `${(log.execution_time_ms / 1000).toFixed(1)}s` : "—"}
                     </span>
                   </div>
 
-                  {/* URL (truncated) */}
                   <div className="flex-1 min-w-0">
                     <code className="text-[11px] text-muted-foreground truncate block">
                       {log.url}
                     </code>
                   </div>
 
-                  {/* Timestamp */}
                   <div className="w-36 shrink-0 text-right">
                     <span className="text-[11px] text-muted-foreground">
-                      {new Date(log.createdAt).toLocaleString("es-CO", {
+                      {new Date(log.created_at).toLocaleString("es-CO", {
                         dateStyle: "short",
                         timeStyle: "medium",
                       })}
@@ -305,19 +303,17 @@ export default function IntegrationLogs() {
                   </div>
                 </div>
 
-                {/* Expanded detail */}
                 {expandedRow === log.id && (
                   <div className="px-4 pb-4 space-y-4 border-t">
-                    {/* Error detail banner */}
-                    {log.errorDetail && (
+                    {log.error_detail && (
                       <div className="mt-3 p-3 rounded-lg bg-red-50 border border-red-200">
                         <div className="flex items-start gap-2">
                           <XCircle className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
                           <div className="flex-1">
                             <p className="text-xs font-semibold text-red-800">Detalle del Error</p>
-                            <p className="text-xs text-red-700 mt-1 break-all">{log.errorDetail}</p>
+                            <p className="text-xs text-red-700 mt-1 break-all">{log.error_detail}</p>
                           </div>
-                          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); copyToClipboard(log.errorDetail || "", "Error"); }}>
+                          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); copyToClipboard(log.error_detail || "", "Error"); }}>
                             <Copy className="w-3.5 h-3.5" />
                           </Button>
                         </div>
@@ -325,14 +321,12 @@ export default function IntegrationLogs() {
                     )}
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-3">
-                      {/* Left column: Request */}
                       <div className="space-y-3">
                         <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
                           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: `rgb(${r}, ${g}, ${b})` }} />
                           Request
                         </h4>
 
-                        {/* URL completa */}
                         <div>
                           <div className="flex items-center justify-between mb-1">
                             <span className="text-[11px] font-semibold text-muted-foreground">URL Completa</span>
@@ -341,109 +335,101 @@ export default function IntegrationLogs() {
                             </Button>
                           </div>
                           <code className="text-[11px] bg-muted px-2 py-1.5 rounded block break-all font-mono">
-                            {log.httpMethod} {log.url}
+                            {log.http_method} {log.url}
                           </code>
                         </div>
 
-                        {/* Headers */}
-                        {log.requestHeaders && (
+                        {log.request_headers && (
                           <div>
                             <div className="flex items-center justify-between mb-1">
                               <span className="text-[11px] font-semibold text-muted-foreground">Headers</span>
-                              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); copyToClipboard(log.requestHeaders || "", "Headers"); }}>
+                              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); copyToClipboard(log.request_headers || "", "Headers"); }}>
                                 <Copy className="w-3 h-3" />
                               </Button>
                             </div>
                             <pre className="text-[11px] bg-muted px-3 py-2 rounded overflow-auto max-h-32 font-mono">
-                              {formatJson(log.requestHeaders)}
+                              {formatJson(log.request_headers)}
                             </pre>
                           </div>
                         )}
 
-                        {/* Request Body */}
                         <div>
                           <div className="flex items-center justify-between mb-1">
                             <span className="text-[11px] font-semibold text-muted-foreground">Body / Parámetros</span>
-                            {log.requestBody && (
-                              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); copyToClipboard(log.requestBody || "", "Body"); }}>
+                            {log.request_body && (
+                              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); copyToClipboard(log.request_body || "", "Body"); }}>
                                 <Copy className="w-3 h-3" />
                               </Button>
                             )}
                           </div>
                           <pre className="text-[11px] bg-muted px-3 py-2 rounded overflow-auto max-h-48 font-mono">
-                            {log.requestBody ? formatJson(log.requestBody) : "Sin body"}
+                            {log.request_body ? formatJson(log.request_body) : "Sin body"}
                           </pre>
                         </div>
 
-                        {/* Token */}
                         <div>
                           <span className="text-[11px] font-semibold text-muted-foreground">Token</span>
                           <code className="text-[11px] bg-muted px-2 py-1 rounded block mt-1 font-mono">
-                            {log.authPrefix} {log.token || "N/A"}
+                            {log.auth_prefix} {log.token || "N/A"}
                           </code>
                         </div>
                       </div>
 
-                      {/* Right column: Response */}
                       <div className="space-y-3">
                         <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
                           <span className={`w-2 h-2 rounded-full ${log.status === "success" ? "bg-green-500" : log.status === "error" ? "bg-red-500" : "bg-orange-500"}`} />
                           Response
                         </h4>
 
-                        {/* HTTP Status + Time */}
                         <div className="flex items-center gap-4">
                           <div>
                             <span className="text-[11px] font-semibold text-muted-foreground block mb-1">HTTP Status</span>
-                            {getHttpStatusBadge(log.httpStatusCode)}
+                            {getHttpStatusBadge(log.http_status_code)}
                           </div>
                           <div>
                             <span className="text-[11px] font-semibold text-muted-foreground block mb-1">Tiempo</span>
                             <span className="text-xs font-mono">
-                              {log.executionTimeMs ? `${log.executionTimeMs}ms (${(log.executionTimeMs / 1000).toFixed(2)}s)` : "—"}
+                              {log.execution_time_ms ? `${log.execution_time_ms}ms (${(log.execution_time_ms / 1000).toFixed(2)}s)` : "—"}
                             </span>
                           </div>
                         </div>
 
-                        {/* Response Body (parsed JSON) */}
                         <div>
                           <div className="flex items-center justify-between mb-1">
                             <span className="text-[11px] font-semibold text-muted-foreground">Response Body (JSON)</span>
-                            {log.responseBody && (
-                              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); copyToClipboard(log.responseBody || "", "Response"); }}>
+                            {log.response_body && (
+                              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); copyToClipboard(log.response_body || "", "Response"); }}>
                                 <Copy className="w-3 h-3" />
                               </Button>
                             )}
                           </div>
                           <pre className="text-[11px] bg-muted px-3 py-2 rounded overflow-auto max-h-48 font-mono">
-                            {log.responseBody ? formatJson(log.responseBody) : "Sin respuesta"}
+                            {log.response_body ? formatJson(log.response_body) : "Sin respuesta"}
                           </pre>
                         </div>
 
-                        {/* Raw Response (when different from parsed, e.g. HTML) */}
-                        {log.rawResponse && log.rawResponse !== log.responseBody && (
+                        {log.raw_response && log.raw_response !== log.response_body && (
                           <div>
                             <div className="flex items-center justify-between mb-1">
                               <span className="text-[11px] font-semibold text-muted-foreground">Raw Response (crudo)</span>
-                              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); copyToClipboard(log.rawResponse || "", "Raw Response"); }}>
+                              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); copyToClipboard(log.raw_response || "", "Raw Response"); }}>
                                 <Copy className="w-3 h-3" />
                               </Button>
                             </div>
                             <pre className="text-[11px] bg-red-50 border border-red-200 px-3 py-2 rounded overflow-auto max-h-48 font-mono text-red-800">
-                              {log.rawResponse}
+                              {log.raw_response}
                             </pre>
                           </div>
                         )}
                       </div>
                     </div>
 
-                    {/* Metadata footer */}
                     <div className="flex items-center gap-4 pt-3 border-t text-[11px] text-muted-foreground">
                       <span>ID: {log.id}</span>
-                      <span>Servicio: {log.serviceName || "—"}</span>
-                      <span>Cliente ID: {log.clientId}</span>
+                      <span>Servicio: {log.service_name || "—"}</span>
+                      <span>Cliente ID: {log.client_id}</span>
                       <span>
-                        {new Date(log.createdAt).toLocaleString("es-CO", {
+                        {new Date(log.created_at).toLocaleString("es-CO", {
                           year: "numeric",
                           month: "2-digit",
                           day: "2-digit",
@@ -460,7 +446,6 @@ export default function IntegrationLogs() {
           </div>
         )}
 
-        {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between mt-6 pt-4 border-t">
             <span className="text-xs text-muted-foreground">

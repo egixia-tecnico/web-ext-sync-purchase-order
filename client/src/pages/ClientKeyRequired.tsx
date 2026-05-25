@@ -1,14 +1,10 @@
-/**
- * ClientKeyRequired - Formulario de acceso cuando no se proporciona clientKey en la URL
- * Permite al usuario ingresar su key, lo valida contra la base de datos y redirige.
- */
 import { useState, useRef } from "react";
 import { Key, ArrowRight, Loader2, Shield, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { trpc } from "@/lib/trpc";
+import { getClientByKey } from "@/lib/api";
 
 type ValidationState = "idle" | "loading" | "valid" | "invalid" | "inactive";
 
@@ -17,15 +13,6 @@ export default function ClientKeyRequired() {
   const [validationState, setValidationState] = useState<ValidationState>("idle");
   const [clientName, setClientName] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
-
-  // Lazy query: se ejecuta solo cuando se llama manualmente
-  const validateQuery = trpc.clients.getByKey.useQuery(
-    { clientKey: inputKey.trim() },
-    {
-      enabled: false,   // No ejecutar automáticamente
-      retry: false,
-    }
-  );
 
   const handleAccess = async () => {
     const key = inputKey.trim();
@@ -38,8 +25,7 @@ export default function ClientKeyRequired() {
     setClientName("");
 
     try {
-      const result = await validateQuery.refetch();
-      const client = result.data;
+      const client = await getClientByKey(key);
 
       if (!client) {
         setValidationState("invalid");
@@ -52,7 +38,6 @@ export default function ClientKeyRequired() {
         return;
       }
 
-      // Key válido y activo → redirigir con el key como parámetro
       setValidationState("valid");
       setClientName(client.name);
 
@@ -81,7 +66,6 @@ export default function ClientKeyRequired() {
       <Card className="max-w-md w-full p-8 shadow-xl">
         <div className="flex flex-col items-center space-y-6">
 
-          {/* Logo / icono */}
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-emerald-600 flex items-center justify-center shadow-md">
               <RefreshCw className="w-6 h-6 text-white" />
@@ -92,7 +76,6 @@ export default function ClientKeyRequired() {
             </div>
           </div>
 
-          {/* Formulario de acceso */}
           <div className="w-full space-y-4">
             <div className="text-center">
               <h2 className="text-lg font-semibold text-slate-800">Ingrese su identificador de empresa</h2>
@@ -101,7 +84,6 @@ export default function ClientKeyRequired() {
               </p>
             </div>
 
-            {/* Input */}
             <div className="relative">
               <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
                 <Key className="w-4 h-4" />
@@ -128,7 +110,6 @@ export default function ClientKeyRequired() {
               />
             </div>
 
-            {/* Feedback de validación */}
             {validationState === "invalid" && (
               <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
@@ -154,7 +135,6 @@ export default function ClientKeyRequired() {
               </div>
             )}
 
-            {/* Botón principal */}
             {validationState !== "valid" ? (
               <Button
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -184,10 +164,8 @@ export default function ClientKeyRequired() {
             )}
           </div>
 
-          {/* Separador */}
           <div className="w-full border-t border-slate-200" />
 
-          {/* Acceso admin */}
           <div className="w-full text-center">
             <Link href="/admin/login">
               <Button variant="ghost" size="sm" className="text-slate-500 hover:text-slate-700 text-xs">

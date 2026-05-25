@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { trpc } from "@/lib/trpc";
+import { sendMagicLink } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,36 +11,29 @@ import { Link } from "wouter";
 export default function AdminLogin() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
-  
-  // Get returnPath from URL query params
+  const [loading, setLoading] = useState(false);
+
   const params = new URLSearchParams(window.location.search);
   const returnPath = params.get("returnPath") || "/clients";
-  
-  const sendMagicLink = trpc.auth.sendMagicLink.useMutation({
-    onSuccess: () => {
-      setSent(true);
-      toast.success("Link mágico enviado", {
-        description: "Revisa tu correo para acceder",
-      });
-    },
-    onError: (error) => {
-      toast.error("Error", {
-        description: error.message,
-      });
-    },
-  });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.endsWith("@egixia.com")) {
       toast.error("Solo se permiten correos @egixia.com", { position: "bottom-left" });
       return;
     }
-    sendMagicLink.mutate({ 
-      email,
-      origin: window.location.origin,
-      returnPath 
-    });
+    setLoading(true);
+    try {
+      // redirectTo lands on /admin/callback so Supabase Auth can pick up the session
+      const redirectTo = `${window.location.origin}/admin/callback?returnPath=${encodeURIComponent(returnPath)}`;
+      await sendMagicLink(email, redirectTo);
+      setSent(true);
+      toast.success("Link mágico enviado", { description: "Revisa tu correo para acceder" });
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al enviar el link");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -73,12 +66,8 @@ export default function AdminLogin() {
                   />
                 </div>
               </div>
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={sendMagicLink.isPending}
-              >
-                {sendMagicLink.isPending ? "Enviando..." : "Enviar Link Mágico"}
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? "Enviando..." : "Enviar Link Mágico"}
               </Button>
             </form>
           ) : (
@@ -91,21 +80,13 @@ export default function AdminLogin() {
                 </p>
               </div>
               <p className="text-xs text-muted-foreground text-center">
-                El link expira en 15 minutos
+                El link expira en 60 minutos (Supabase Auth)
               </p>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => {
-                  setSent(false);
-                  setEmail("");
-                }}
-              >
+              <Button variant="outline" className="w-full" onClick={() => { setSent(false); setEmail(""); }}>
                 Enviar otro link
               </Button>
             </div>
           )}
-          
           <div className="mt-6 pt-6 border-t">
             <Link href="/">
               <Button variant="ghost" className="w-full" size="sm">

@@ -1,14 +1,12 @@
+// Supabase Auth handles the magic link automatically when the user clicks it.
+// This page just waits for the session to be established and redirects.
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { trpc } from "@/lib/trpc";
+import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-/**
- * Determina el texto descriptivo del destino según el returnPath.
- * Permite mensajes más amigables en la pantalla de éxito.
- */
 function getDestinationLabel(returnPath: string): string {
   if (returnPath === "/clients") return "Gestión de Clientes";
   if (returnPath.includes("openHistory=true")) return "Historial de Verificaciones";
@@ -22,35 +20,29 @@ export default function MagicLinkCallback() {
   const [errorMessage, setErrorMessage] = useState("");
   const [destinationLabel, setDestinationLabel] = useState("la aplicación");
 
-  const validateMagicLink = trpc.auth.validateMagicLink.useMutation({
-    onSuccess: (data) => {
-      setStatus("success");
-      // Usar returnPath guardado en la BD, o fallback a /clients
-      const targetPath = data.returnPath || "/clients";
-      setDestinationLabel(getDestinationLabel(targetPath));
-      // Redirigir después de 2 segundos para que el usuario vea el mensaje de éxito
-      setTimeout(() => {
-        setLocation(targetPath);
-      }, 2000);
-    },
-    onError: (error) => {
-      setStatus("error");
-      setErrorMessage(error.message);
-    },
-  });
-
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const tokenParam = params.get("token");
+    // Supabase Auth fires onAuthStateChange with SIGNED_IN after the magic link is clicked
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session?.user?.email?.endsWith("@egixia.com")) {
+        const params = new URLSearchParams(window.location.search);
+        const returnPath = params.get("returnPath") || "/clients";
+        setDestinationLabel(getDestinationLabel(returnPath));
+        setStatus("success");
+        setTimeout(() => setLocation(returnPath), 2000);
+      } else if (event === "SIGNED_IN" && session?.user?.email && !session.user.email.endsWith("@egixia.com")) {
+        // Non-egixia email — sign out immediately
+        supabase.auth.signOut();
+        setStatus("error");
+        setErrorMessage("Solo se permiten correos @egixia.com para acceso de administrador.");
+      } else if (event === "INITIAL_SESSION" && !session) {
+        // No session after callback — likely invalid/expired token
+        setStatus("error");
+        setErrorMessage("Link inválido o expirado. Solicita un nuevo link de acceso.");
+      }
+    });
 
-    if (!tokenParam) {
-      setStatus("error");
-      setErrorMessage("Token no encontrado en la URL");
-      return;
-    }
-
-    validateMagicLink.mutate({ token: tokenParam });
-  }, []);
+    return () => subscription.unsubscribe();
+  }, [setLocation]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
@@ -65,7 +57,6 @@ export default function MagicLinkCallback() {
               <p className="text-sm text-muted-foreground">Validando tu link de acceso...</p>
             </>
           )}
-
           {status === "success" && (
             <>
               <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
@@ -73,13 +64,10 @@ export default function MagicLinkCallback() {
               </div>
               <div className="text-center space-y-2">
                 <p className="font-semibold text-green-800">¡Acceso Autorizado!</p>
-                <p className="text-sm text-muted-foreground">
-                  Redirigiendo a {destinationLabel}...
-                </p>
+                <p className="text-sm text-muted-foreground">Redirigiendo a {destinationLabel}...</p>
               </div>
             </>
           )}
-
           {status === "error" && (
             <>
               <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center">
@@ -89,11 +77,7 @@ export default function MagicLinkCallback() {
                 <p className="font-semibold text-red-800">Error de Autenticación</p>
                 <p className="text-sm text-muted-foreground">{errorMessage}</p>
               </div>
-              <Button
-                variant="outline"
-                className="mt-4"
-                onClick={() => setLocation("/admin/login")}
-              >
+              <Button variant="outline" className="mt-4" onClick={() => setLocation("/admin/login")}>
                 Solicitar nuevo link
               </Button>
             </>
