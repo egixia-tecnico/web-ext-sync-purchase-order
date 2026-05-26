@@ -942,89 +942,78 @@ export const appRouter = router({
           data?: any;
         }> = [];
 
-        const totalBatches = Math.ceil(input.orders.length / batchSize);
+        // The frontend pre-groups orders by buyer_external_code and sends up to 10 OC per entry
+        // as a comma-separated string in purchaseOrderNumber (e.g. "3400313054,3400313050,3400312747").
+        // The backend simply iterates the entries and forwards each one to the API as-is.
+        console.log(`[Egixia] Batch sync: ${input.orders.length} grouped entries (pre-grouped by society)`);
 
-        for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
-          const batchStart = batchIndex * batchSize;
-          const batchEnd = Math.min(batchStart + batchSize, input.orders.length);
-          const batch = input.orders.slice(batchStart, batchEnd);
+        for (const order of input.orders) {
+          try {
+            const data = await callEgixiaApi(
+              `/apimanager/purchase_order_v1/synchronize_purchase_order`,
+              "POST",
+              {
+                buyer_external_code: order.buyerExternalCode,
+                purchase_order_number: order.purchaseOrderNumber,
+                send_emails: order.sendEmails,
+              },
+              input.clientKey
+            );
 
-          console.log(`[Egixia] Processing sync batch ${batchIndex + 1}/${totalBatches} (${batch.length} orders)`);
-
-          for (const order of batch) {
-            try {
-              const data = await callEgixiaApi(
-                `/apimanager/purchase_order_v1/synchronize_purchase_order`,
-                "POST",
-                {
-                  buyer_external_code: order.buyerExternalCode,
-                  purchase_order_number: order.purchaseOrderNumber,
-                  send_emails: order.sendEmails,
-                },
-                input.clientKey
-              );
-
-              const seguimiento = data?.SDTSeguimineto;
-              if (!seguimiento) {
-                results.push({
-                  purchaseOrderNumber: order.purchaseOrderNumber,
-                  buyerExternalCode: order.buyerExternalCode,
-                  success: false,
-                  error: "Respuesta inv\u00e1lida del servidor (sin SDTSeguimineto)",
-                  data: null,
-                });
-                continue;
-              }
-
-              const isSuccess = (seguimiento.Actualizadas > 0 || seguimiento.Creadas > 0);
-              const hasError = (
-                seguimiento.ProveedorNoExiste > 0 ||
-                seguimiento.CompradorNoExiste > 0 ||
-                seguimiento.TotalOCs === 0 ||
-                seguimiento.AnuladasNoRegistradas > 0 ||
-                seguimiento.SinProveedor > 0
-              );
-
-              let errorMessage = null;
-              if (data.message && data.message.includes("Not found Buyer")) {
-                errorMessage = "No existe la empresa compradora, verifique que el n\u00famero contenga incluso los ceros a la izquierda en caso que aplique";
-              } else if (seguimiento.SinProveedor > 0) {
-                errorMessage = "La orden de compra trae el campo proveedor nulo";
-              } else if (seguimiento.ProveedorNoExiste > 0) {
-                errorMessage = "El proveedor no existe en el portal";
-              } else if (seguimiento.CompradorNoExiste > 0) {
-                errorMessage = "La empresa compradora no est\u00e1 configurada en la integraci\u00f3n o no existe";
-              } else if (seguimiento.AnuladasNoRegistradas > 0) {
-                errorMessage = "La orden de compra est\u00e1 100% anulada y no exist\u00eda previamente en el portal";
-              } else if (seguimiento.TotalOCs === 0) {
-                errorMessage = "No se encontr\u00f3 la orden de compra en el sistema origen";
-              }
-
-              results.push({
-                purchaseOrderNumber: order.purchaseOrderNumber,
-                buyerExternalCode: order.buyerExternalCode,
-                success: isSuccess && !hasError,
-                message: data.message || null,
-                errorMessage,
-                data: seguimiento,
-              });
-            } catch (error: any) {
+            const seguimiento = data?.SDTSeguimineto;
+            if (!seguimiento) {
               results.push({
                 purchaseOrderNumber: order.purchaseOrderNumber,
                 buyerExternalCode: order.buyerExternalCode,
                 success: false,
-                error: error.message,
-                errorMessage: error.apiMessage || error.message,
-                httpStatus: error.httpStatus || null,
+                error: "Respuesta inválida del servidor (sin SDTSeguimineto)",
                 data: null,
               });
+              continue;
             }
-          }
 
-          // Wait between batches (except after the last batch)
-          if (batchIndex < totalBatches - 1) {
-            console.log(`[Egixia] Waiting ${batchDelaySeconds}s before next sync batch...`);
-            await sleep(batchDelaySeconds * 1000);
+            const isSuccess = (seguimiento.Actualizadas > 0 || seguimiento.Creadas > 0);
+            const hasError = (
+              seguimiento.ProveedorNoExiste > 0 ||
+              seguimiento.CompradorNoExiste > 0 ||
+              seguimiento.TotalOCs === 0 ||
+              seguimiento.AnuladasNoRegistradas > 0 ||
+              seguimiento.SinProveedor > 0
+            );
+
+            let errorMessage = null;
+            if (data.message && data.message.includes("Not found Buyer")) {
+              errorMessage = "No existe la empresa compradora, verifique que el número contenga incluso los ceros a la izquierda en caso que aplique";
+            } else if (seguimiento.SinProveedor > 0) {
+              errorMessage = "La orden de compra trae el campo proveedor nulo";
+            } else if (seguimiento.ProveedorNoExiste > 0) {
+              errorMessage = "El proveedor no existe en el portal";
+            } else if (seguimiento.CompradorNoExiste > 0) {
+              errorMessage = "La empresa compradora no está configurada en la integración o no existe";
+            } else if (seguimiento.AnuladasNoRegistradas > 0) {
+              errorMessage = "La orden de compra está 100% anulada y no existía previamente en el portal";
+            } else if (seguimiento.TotalOCs === 0) {
+              errorMessage = "No se encontró la orden de compra en el sistema origen";
+            }
+
+            results.push({
+              purchaseOrderNumber: order.purchaseOrderNumber,
+              buyerExternalCode: order.buyerExternalCode,
+              success: isSuccess && !hasError,
+              message: data.message || null,
+              errorMessage,
+              data: seguimiento,
+            });
+          } catch (error: any) {
+            results.push({
+              purchaseOrderNumber: order.purchaseOrderNumber,
+              buyerExternalCode: order.buyerExternalCode,
+              success: false,
+              error: error.message,
+              errorMessage: error.apiMessage || error.message,
+              httpStatus: error.httpStatus || null,
+              data: null,
+            });
           }
         }
 
@@ -1037,11 +1026,6 @@ export const appRouter = router({
             total: results.length,
             success: successCount,
             failed: failedCount,
-          },
-          batchInfo: {
-            batchSize,
-            batchDelaySeconds,
-            totalBatches,
           },
         };
       }),
